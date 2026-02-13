@@ -105,7 +105,7 @@ class TmuxManager:
                 "for f in ~/.bashrc ~/.bash_profile ~/.zshrc ~/.zshenv ~/.profile; "
                 "do [ -f $f ] && source $f 2>/dev/null; done"
             )
-            cmd = f"{source_profiles} && {docker_command}"
+            cmd = f"{source_profiles}; {docker_command}"
         else:
             # Host mode: build the claude command from prompt files
             cmd = self._build_claude_command(
