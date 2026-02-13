@@ -25,6 +25,7 @@ class TmuxManager:
         log_file: Path,
         instructions: str,
         initial_prompt: Optional[str] = None,
+        auto_approve: bool = False,
     ) -> None:
         """
         Create a new tmux session running Claude Code.
@@ -65,7 +66,12 @@ class TmuxManager:
         # Start Claude Code with instructions
         # Unset CLAUDECODE to allow nested sessions, then escape quotes in instructions
         escaped_instructions = instructions.replace('"', '\\"').replace("$", "\\$")
-        cmd = f'unset CLAUDECODE && claude --system-prompt "{escaped_instructions}"'
+
+        # Build command with optional auto-approve flag
+        base_cmd = "unset CLAUDECODE && claude"
+        if auto_approve:
+            base_cmd += " --dangerously-skip-permissions"
+        cmd = f'{base_cmd} --system-prompt "{escaped_instructions}"'
 
         subprocess.run(
             ["tmux", "send-keys", "-t", session_name, cmd, "Enter"], check=True

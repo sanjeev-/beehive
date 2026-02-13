@@ -50,6 +50,12 @@ def cli(ctx, data_dir: Path):
 )
 @click.option("--base-branch", "-b", default="main", help="Base branch (default: main)")
 @click.option("--prompt", "-p", help="Initial prompt to send to agent")
+@click.option(
+    "--auto-approve",
+    "-y",
+    is_flag=True,
+    help="Auto-approve all agent actions (skip permission prompts)",
+)
 @click.pass_context
 def create(
     ctx,
@@ -58,6 +64,7 @@ def create(
     working_dir: Path,
     base_branch: str,
     prompt: Optional[str],
+    auto_approve: bool,
 ):
     """Create a new agent session."""
     # Check tmux
@@ -111,6 +118,7 @@ def create(
                 Path(session.log_file),
                 instructions,
                 prompt,
+                auto_approve=auto_approve,
             )
 
         console.print(f"[green]✓[/green] Created session: [bold]{session.name}[/bold]")
