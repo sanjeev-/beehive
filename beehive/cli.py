@@ -13,6 +13,7 @@ from beehive.core.git_ops import GitOperations
 from beehive.core.pr_creator import PRCreator
 from beehive.core.session import SessionManager, SessionStatus
 from beehive.core.tmux_manager import TmuxManager
+from beehive.core.config import BeehiveConfig
 
 console = Console()
 
@@ -31,6 +32,7 @@ def cli(ctx, data_dir: Path):
     ctx.obj["data_dir"] = data_dir
     ctx.obj["session_manager"] = SessionManager(data_dir)
     ctx.obj["tmux"] = TmuxManager()
+    ctx.obj["config"] = BeehiveConfig(data_dir)
 
 
 @cli.command()
@@ -56,6 +58,11 @@ def cli(ctx, data_dir: Path):
     is_flag=True,
     help="Auto-approve all agent actions (skip permission prompts)",
 )
+@click.option(
+    "--claude-md",
+    type=click.Path(exists=True, path_type=Path),
+    help="Project-specific CLAUDE.md file (merged with global template)",
+)
 @click.pass_context
 def create(
     ctx,
@@ -65,6 +72,7 @@ def create(
     base_branch: str,
     prompt: Optional[str],
     auto_approve: bool,
+    claude_md: Optional[Path],
 ):
     """Create a new agent session."""
     # Check tmux
@@ -90,6 +98,10 @@ def create(
             sys.exit(1)
         instructions = instruction_file.read_text()
 
+    # Combine with global system prompt
+    config = ctx.obj["config"]
+    instructions = config.combine_prompts(instructions)
+
     # Parse prompt (file or string)
     if prompt and prompt.startswith("@"):
         prompt_file = Path(prompt[1:])
@@ -110,6 +122,13 @@ def create(
             # Create git worktree (isolated workspace)
             worktree_path = Path(session.working_directory)
             git.create_worktree(session.branch_name, worktree_path, base_branch)
+
+            # Copy project-specific CLAUDE.md into worktree, then
+            # prepend global template on top (merge)
+            if claude_md:
+                import shutil
+                shutil.copy2(claude_md, worktree_path / "CLAUDE.md")
+            config.inject_claude_md(worktree_path)
 
             # Start tmux session in the worktree directory
             ctx.obj["tmux"].create_session(
@@ -405,6 +424,69 @@ def delete(ctx, session_id: str, force: bool):
     console.print(
         f"[dim]Note: Branch {session.branch_name} still exists in git[/dim]"
     )
+
+
+@cli.group("config")
+@click.pass_context
+def config_group(ctx):
+    """Manage Beehive configuration."""
+    pass
+
+
+@config_group.group("claude-md")
+@click.pass_context
+def claude_md_group(ctx):
+    """Manage the default CLAUDE.md template for all agents."""
+    pass
+
+
+@claude_md_group.command("show")
+@click.pass_context
+def claude_md_show(ctx):
+    """Print the current CLAUDE.md template."""
+    config = ctx.obj["config"]
+    content = config.get_claude_md()
+    if content:
+        console.print(content)
+    else:
+        console.print("[dim]No CLAUDE.md template configured.[/dim]")
+        console.print(f"[dim]Set one with: beehive config claude-md set \"# Rules\"[/dim]")
+
+
+@claude_md_group.command("edit")
+@click.pass_context
+def claude_md_edit(ctx):
+    """Open the CLAUDE.md template in $EDITOR."""
+    import os
+
+    config = ctx.obj["config"]
+    path = config.get_claude_md_path()
+
+    # Ensure file exists
+    config.data_dir.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("")
+
+    editor = os.environ.get("EDITOR", "vi")
+    os.execvp(editor, [editor, str(path)])
+
+
+@claude_md_group.command("set")
+@click.argument("content")
+@click.pass_context
+def claude_md_set(ctx, content: str):
+    """Set the CLAUDE.md template from a string or @file."""
+    config = ctx.obj["config"]
+
+    if content.startswith("@"):
+        filepath = Path(content[1:])
+        if not filepath.exists():
+            console.print(f"[red]Error: File not found: {filepath}[/red]")
+            sys.exit(1)
+        content = filepath.read_text()
+
+    config.set_claude_md(content)
+    console.print(f"[green]✓[/green] CLAUDE.md template saved to {config.get_claude_md_path()}")
 
 
 if __name__ == "__main__":
