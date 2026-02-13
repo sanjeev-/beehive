@@ -19,6 +19,22 @@ class TmuxManager:
             return False
 
     @staticmethod
+    def _dollar_quote(s: str) -> str:
+        """Escape a string for bash $'...' quoting.
+
+        Produces a single-line token that bash will expand back to the
+        original (possibly multi-line) string.
+        """
+        return (
+            s
+            .replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
+
+    @staticmethod
     def _build_claude_command(
         instructions: str,
         initial_prompt: Optional[str] = None,
@@ -26,20 +42,20 @@ class TmuxManager:
     ) -> str:
         """Build the claude CLI command string.
 
-        Returns the raw command (unescaped for shell) that launches claude
-        with the given instructions and optional prompt.
+        Uses bash $'...' quoting so the entire command stays on a single
+        line — safe for tmux send-keys and for embedding inside docker run.
         """
-        escaped_instructions = instructions.replace('"', '\\"').replace("$", "\\$")
+        escaped_instructions = TmuxManager._dollar_quote(instructions)
 
         base_cmd = "unset CLAUDECODE && claude"
         if auto_approve:
             base_cmd += " --dangerously-skip-permissions"
             base_cmd += " -p"
-        cmd = f'{base_cmd} --system-prompt "{escaped_instructions}"'
+        cmd = f"{base_cmd} --system-prompt $'{escaped_instructions}'"
 
         if auto_approve and initial_prompt:
-            escaped_prompt = initial_prompt.replace('"', '\\"').replace("$", "\\$")
-            cmd += f' "{escaped_prompt}"'
+            escaped_prompt = TmuxManager._dollar_quote(initial_prompt)
+            cmd += f" $'{escaped_prompt}'"
         elif auto_approve:
             cmd += ' "Execute the instructions in the system prompt."'
 
