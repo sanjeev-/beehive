@@ -1,0 +1,126 @@
+"""Session data models and management."""
+
+import uuid
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SessionStatus(str, Enum):
+    """Status of an agent session."""
+
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    STOPPED = "stopped"
+
+
+class AgentSession(BaseModel):
+    """Represents a Claude Code agent session."""
+
+    session_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
+    name: str
+    branch_name: str
+    instructions: str
+    status: SessionStatus = SessionStatus.RUNNING
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    completed_at: Optional[datetime] = None
+    tmux_session_name: str  # e.g., "beehive-a1b2c3d4"
+    log_file: str  # Store as string for JSON serialization
+    working_directory: str  # Git worktree path (isolated workspace)
+    original_repo: str  # Original repository path
+    pr_url: Optional[str] = None
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class SessionManager:
+    """Manages session lifecycle and state."""
+
+    def __init__(self, storage_path: Path):
+        """Initialize session manager with storage path."""
+        self.storage_path = storage_path
+        # Import here to avoid circular dependency
+        from beehive.core.storage import SessionStorage
+
+        self.storage = SessionStorage(storage_path)
+
+    def create_session(
+        self,
+        name: str,
+        instructions: str,
+        working_dir: Path,
+        base_branch: str = "main",
+    ) -> AgentSession:
+        """Create new session with worktree and tmux session."""
+        from beehive.core.git_ops import generate_branch_name
+
+        # Generate session ID and branch name
+        session_id = str(uuid.uuid4())[:8]
+        branch_name = generate_branch_name(name, session_id)
+        tmux_session_name = f"beehive-{session_id}"
+
+        # Get log file path
+        log_file = self.storage.get_log_path(session_id)
+
+        # Get worktree path (isolated workspace for this agent)
+        worktree_path = self.storage.get_worktree_path(session_id)
+
+        # Create session object
+        session = AgentSession(
+            session_id=session_id,
+            name=name,
+            branch_name=branch_name,
+            instructions=instructions,
+            tmux_session_name=tmux_session_name,
+            log_file=str(log_file),
+            working_directory=str(worktree_path),
+            original_repo=str(working_dir),
+        )
+
+        # Save to storage
+        self.storage.save_session(session)
+
+        return session
+
+    def get_session(self, session_id: str) -> Optional[AgentSession]:
+        """Retrieve session by ID (supports partial ID matching)."""
+        return self.storage.load_session(session_id)
+
+    def list_sessions(
+        self, status_filter: Optional[SessionStatus] = None
+    ) -> list[AgentSession]:
+        """List all sessions, optionally filtered by status."""
+        sessions = self.storage.load_all_sessions()
+        if status_filter:
+            sessions = [s for s in sessions if s.status == status_filter]
+        # Sort by created_at, newest first
+        sessions.sort(key=lambda s: s.created_at, reverse=True)
+        return sessions
+
+    def update_session(self, session_id: str, **kwargs) -> AgentSession:
+        """Update session fields and persist."""
+        session = self.get_session(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+
+        # Update fields
+        for key, value in kwargs.items():
+            if hasattr(session, key):
+                setattr(session, key, value)
+
+        # Special handling for completed_at
+        if "status" in kwargs and kwargs["status"] == SessionStatus.COMPLETED:
+            if not session.completed_at:
+                session.completed_at = datetime.utcnow()
+
+        # Save updated session
+        self.storage.save_session(session)
+        return session
+
+    def delete_session(self, session_id: str) -> None:
+        """Delete a session."""
+        self.storage.delete_session(session_id)
