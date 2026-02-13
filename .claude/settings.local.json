@@ -9,7 +9,19 @@
       "Bash(python3 -m pytest:*)",
       "Bash(cat:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nInitial commit: Beehive CLI with git worktree support\n\nImplement complete Beehive CLI for managing multiple Claude Code agent\nsessions in parallel using git worktrees for isolation.\n\nFeatures:\n- Git worktree-based architecture for true parallel execution\n- Each agent runs in isolated workspace \\(no branch conflicts\\)\n- tmux sessions for interactive and programmatic control\n- Session lifecycle management \\(create, list, attach, send, logs, status\\)\n- Automated PR creation via gh CLI\n- File-based storage with concurrent access locking\n\nArchitecture:\n- Uses git worktrees to create isolated workspaces per agent\n- Each agent works in ~/.beehive/worktrees/beehive-<session-id>/\n- Main repository stays untouched on original branch\n- Multiple agents can work on same repo simultaneously\n\nCore modules:\n- session.py: Session data models and lifecycle management\n- storage.py: File persistence with locking for concurrency\n- tmux_manager.py: tmux session creation and control\n- git_ops.py: Git operations including worktree management\n- pr_creator.py: PR creation via gh CLI\n- cli.py: Click-based CLI with 9 commands\n\nTesting:\n- 15 unit tests, all passing\n- Comprehensive test coverage for core functionality\n\nDocumentation:\n- README.md: Complete user guide with examples\n- WORKTREES.md: In-depth worktree architecture guide\n- QUICKSTART.md: 5-minute getting started\n- INSTALL.md: Installation instructions\n- CONTRIBUTING.md: Development guide\n- WORKTREE_IMPLEMENTATION.md: Technical implementation details\n\nThis enables orchestrating unlimited Claude Code agents on the same\nrepository with zero conflicts - transforming sequential development\ninto true parallel AI-assisted development.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh repo create:*)",
+      "Bash(git push:*)",
+      "Bash(gh repo view:*)",
+      "Bash(tmux ls:*)",
+      "Bash(tmux:*)",
+      "Bash(export PYTHONPATH=\"$HOME/Documents/beehive:$PYTHONPATH\")",
+      "Bash(~/bin/beehive:*)",
+      "Bash(~/.zshrc)",
+      "Bash(export PATH=\"$HOME/bin:$PATH\")",
+      "Bash(beehive --help:*)",
+      "Bash(beehive create:*)"
     ]
   }
 }

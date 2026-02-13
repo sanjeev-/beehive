@@ -63,9 +63,9 @@ class TmuxManager:
         )
 
         # Start Claude Code with instructions
-        # Escape quotes in instructions for shell
+        # Unset CLAUDECODE to allow nested sessions, then escape quotes in instructions
         escaped_instructions = instructions.replace('"', '\\"').replace("$", "\\$")
-        cmd = f'claude --system-prompt "{escaped_instructions}"'
+        cmd = f'unset CLAUDECODE && claude --system-prompt "{escaped_instructions}"'
 
         subprocess.run(
             ["tmux", "send-keys", "-t", session_name, cmd, "Enter"], check=True
