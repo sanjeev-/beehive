@@ -67,7 +67,7 @@ class DockerManager:
             "docker", "run", "--rm", "-t",
             f"--name beehive-{session_id}",
             "--cap-add=NET_ADMIN",
-            "-e ANTHROPIC_API_KEY",
+            f"--env-file {worktree_path}/.beehive-env",
             f"-v {worktree_path}:/workspace",
         ]
 
