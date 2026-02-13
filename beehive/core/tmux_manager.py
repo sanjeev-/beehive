@@ -99,8 +99,13 @@ class TmuxManager:
         )
 
         if docker_command:
-            # Docker mode: send the pre-built docker run command
-            cmd = docker_command
+            # Docker mode: source common profile files so env vars
+            # (like ANTHROPIC_API_KEY) are available, then run docker
+            source_profiles = (
+                "for f in ~/.bashrc ~/.bash_profile ~/.zshrc ~/.zshenv ~/.profile; "
+                "do [ -f $f ] && source $f 2>/dev/null; done"
+            )
+            cmd = f"{source_profiles} && {docker_command}"
         else:
             # Host mode: build the claude command from prompt files
             cmd = self._build_claude_command(

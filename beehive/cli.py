@@ -152,18 +152,6 @@ def create(
             if auto_approve and prompt:
                 (worktree_path / ".beehive-prompt.txt").write_text(prompt)
 
-            # Write env file for Docker (passes API key without relying on tmux shell env)
-            if use_docker:
-                import os
-                env_file = worktree_path / ".beehive-env"
-                env_lines = []
-                for var in ("ANTHROPIC_API_KEY",):
-                    val = os.environ.get(var, "")
-                    if val:
-                        env_lines.append(f"{var}={val}")
-                env_file.write_text("\n".join(env_lines) + "\n")
-                env_file.chmod(0o600)
-
             # Build docker command if using Docker
             docker_command = None
             if use_docker:
