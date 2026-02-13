@@ -12,9 +12,9 @@
     "source=beehive-data,target=/home/node/.beehive,type=volume",
     "source=beehive-claude,target=/home/node/.claude,type=volume",
     "source=beehive-shell-history,target=/home/node/.shell_history,type=volume",
-    "source=${localEnv:BEEHIVE_PROJECTS:-${localEnv:HOME}/projects},target=/home/node/projects,type=bind"
+    "source=${localEnv:BEEHIVE_PROJECTS},target=/home/node/projects,type=bind"
   ],
-  "postCreateCommand": "pip install -e '.[dev]'",
+  "postCreateCommand": "python3 -m venv /home/node/.venv && /home/node/.venv/bin/pip install -e '.[dev]' && echo 'source /home/node/.venv/bin/activate' >> /home/node/.bashrc",
   "postStartCommand": "sudo /usr/local/bin/init-firewall.sh",
   "customizations": {
     "vscode": {

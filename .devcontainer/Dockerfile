@@ -2,9 +2,9 @@ FROM mcr.microsoft.com/devcontainers/javascript-node:20
 
 # System packages: Python, tmux, fzf, zsh, networking tools, gh CLI
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-venv python3-pip \
+        python3 python3-venv python3-pip \
         tmux fzf zsh \
-        iptables iproute2 \
+        iptables iproute2 dnsutils \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI

@@ -71,14 +71,25 @@ class TmuxManager:
         base_cmd = "unset CLAUDECODE && claude"
         if auto_approve:
             base_cmd += " --dangerously-skip-permissions"
+            # Use -p (print) mode for autonomous agents — skips onboarding
+            # and exits when the task is complete
+            base_cmd += " -p"
         cmd = f'{base_cmd} --system-prompt "{escaped_instructions}"'
+
+        # In -p mode, the prompt is passed as a positional arg
+        if auto_approve and initial_prompt:
+            escaped_prompt = initial_prompt.replace('"', '\\"').replace("$", "\\$")
+            cmd += f' "{escaped_prompt}"'
+        elif auto_approve:
+            # No explicit prompt: tell Claude to execute the system prompt instructions
+            cmd += ' "Execute the instructions in the system prompt."'
 
         subprocess.run(
             ["tmux", "send-keys", "-t", session_name, cmd, "Enter"], check=True
         )
 
-        # Send initial prompt if provided
-        if initial_prompt:
+        # Send initial prompt if provided (interactive mode only)
+        if not auto_approve and initial_prompt:
             time.sleep(2)  # Wait for Claude to start
             # Escape quotes in prompt
             escaped_prompt = initial_prompt.replace('"', '\\"').replace("$", "\\$")
