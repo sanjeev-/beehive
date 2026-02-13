@@ -21,7 +21,12 @@
       "Bash(~/.zshrc)",
       "Bash(export PATH=\"$HOME/bin:$PATH\")",
       "Bash(beehive --help:*)",
-      "Bash(beehive create:*)"
+      "Bash(beehive create:*)",
+      "Bash(beehive delete:*)",
+      "Bash(beehive logs:*)",
+      "Bash(beehive send:*)",
+      "Bash(beehive status:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

@@ -226,6 +226,8 @@ def send(ctx, session_id: str, text: str):
 @click.pass_context
 def logs(ctx, session_id: str, follow: bool, lines: int):
     """View session logs."""
+    import os
+
     session = ctx.obj["session_manager"].get_session(session_id)
     if not session:
         console.print(f"[red]Session {session_id} not found[/red]")
@@ -237,10 +239,12 @@ def logs(ctx, session_id: str, follow: bool, lines: int):
         console.print("[dim]The session may not have started yet.[/dim]")
         sys.exit(1)
 
+    # Use os.execvp to replace this process with tail
+    # This prevents any subprocess weirdness and ensures clean output
     if follow:
-        subprocess.run(["tail", "-f", "-n", str(lines), str(log_file)])
+        os.execvp("tail", ["tail", "-f", "-n", str(lines), str(log_file)])
     else:
-        subprocess.run(["tail", "-n", str(lines), str(log_file)])
+        os.execvp("tail", ["tail", "-n", str(lines), str(log_file)])
 
 
 @cli.command()
