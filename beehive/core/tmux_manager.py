@@ -19,43 +19,28 @@ class TmuxManager:
             return False
 
     @staticmethod
-    def _dollar_quote(s: str) -> str:
-        """Escape a string for bash $'...' quoting.
-
-        Produces a single-line token that bash will expand back to the
-        original (possibly multi-line) string.
-        """
-        return (
-            s
-            .replace("\\", "\\\\")
-            .replace("'", "\\'")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t")
-        )
-
-    @staticmethod
     def _build_claude_command(
-        instructions: str,
-        initial_prompt: Optional[str] = None,
+        prompt_dir: str,
+        has_initial_prompt: bool = False,
         auto_approve: bool = False,
     ) -> str:
         """Build the claude CLI command string.
 
-        Uses bash $'...' quoting so the entire command stays on a single
-        line — safe for tmux send-keys and for embedding inside docker run.
+        Reads the system prompt (and optional initial prompt) from files
+        in prompt_dir, keeping the command short and free of quoting issues.
+        Files expected: .beehive-system-prompt.txt, .beehive-prompt.txt
         """
-        escaped_instructions = TmuxManager._dollar_quote(instructions)
-
         base_cmd = "unset CLAUDECODE && claude"
         if auto_approve:
             base_cmd += " --dangerously-skip-permissions"
             base_cmd += " -p"
-        cmd = f"{base_cmd} --system-prompt $'{escaped_instructions}'"
 
-        if auto_approve and initial_prompt:
-            escaped_prompt = TmuxManager._dollar_quote(initial_prompt)
-            cmd += f" $'{escaped_prompt}'"
+        prompt_file = f"{prompt_dir}/.beehive-system-prompt.txt"
+        cmd = f'{base_cmd} --system-prompt "$(cat {prompt_file})"'
+
+        if auto_approve and has_initial_prompt:
+            initial_file = f"{prompt_dir}/.beehive-prompt.txt"
+            cmd += f' "$(cat {initial_file})"'
         elif auto_approve:
             cmd += ' "Execute the instructions in the system prompt."'
 
@@ -66,7 +51,7 @@ class TmuxManager:
         session_name: str,
         working_dir: Path,
         log_file: Path,
-        instructions: str,
+        prompt_dir: str,
         initial_prompt: Optional[str] = None,
         auto_approve: bool = False,
         docker_command: Optional[str] = None,
@@ -74,10 +59,16 @@ class TmuxManager:
         """
         Create a new tmux session running Claude Code.
 
+        Args:
+            prompt_dir: Directory containing .beehive-system-prompt.txt
+                        (and optionally .beehive-prompt.txt). For host mode
+                        this is the worktree path; for docker mode it is
+                        unused since docker_command is pre-built.
+
         Steps:
         1. Create detached tmux session
         2. Enable logging via pipe-pane
-        3. Send Claude Code command (or docker_command) with instructions
+        3. Send Claude Code command (or docker_command)
         4. Optionally send initial prompt (interactive host mode only)
         """
         # Create tmux session
@@ -111,8 +102,12 @@ class TmuxManager:
             # Docker mode: send the pre-built docker run command
             cmd = docker_command
         else:
-            # Host mode: build the claude command locally
-            cmd = self._build_claude_command(instructions, initial_prompt, auto_approve)
+            # Host mode: build the claude command from prompt files
+            cmd = self._build_claude_command(
+                prompt_dir,
+                has_initial_prompt=bool(auto_approve and initial_prompt),
+                auto_approve=auto_approve,
+            )
 
         subprocess.run(
             ["tmux", "send-keys", "-t", session_name, cmd, "Enter"], check=True

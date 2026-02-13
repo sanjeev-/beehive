@@ -1,6 +1,5 @@
 """Docker container management for isolated agent execution."""
 
-import base64
 import subprocess
 from pathlib import Path
 
@@ -60,11 +59,9 @@ class DockerManager:
     ) -> str:
         """Build the full `docker run` command string.
 
-        Uses base64 encoding to pass the claude command into the container,
-        avoiding all shell quoting and escaping issues.
+        The claude_cmd should use $(cat ...) references to read prompts
+        from files in /workspace, keeping it short and quoting-safe.
         """
-        encoded_cmd = base64.b64encode(claude_cmd.encode()).decode()
-
         home = Path.home()
         parts = [
             "docker", "run", "--rm", "-t",
@@ -84,10 +81,10 @@ class DockerManager:
             if src.exists():
                 parts.append(f"-v {src}:{dest}:ro")
 
-        # Base64-decode the command into a script and execute it
+        # Single quotes prevent host-shell interpretation; the inner
+        # bash expands $(cat ...) to read prompt files from /workspace.
         inner = (
-            f"sudo /usr/local/bin/init-firewall.sh >/dev/null 2>&1; "
-            f"echo {encoded_cmd} | base64 -d > /tmp/agent.sh && bash /tmp/agent.sh"
+            f"sudo /usr/local/bin/init-firewall.sh >/dev/null 2>&1 && {claude_cmd}"
         )
 
         parts.extend([

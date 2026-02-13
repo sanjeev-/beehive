@@ -147,6 +147,11 @@ def create(
                 shutil.copy2(claude_md, worktree_path / "CLAUDE.md")
             config.inject_claude_md(worktree_path)
 
+            # Write prompt files to worktree (avoids command-line quoting issues)
+            (worktree_path / ".beehive-system-prompt.txt").write_text(instructions)
+            if auto_approve and prompt:
+                (worktree_path / ".beehive-prompt.txt").write_text(prompt)
+
             # Build docker command if using Docker
             docker_command = None
             if use_docker:
@@ -160,7 +165,9 @@ def create(
                     )
                 else:
                     claude_cmd = TmuxManager._build_claude_command(
-                        instructions, prompt, auto_approve
+                        "/workspace",
+                        has_initial_prompt=bool(prompt),
+                        auto_approve=auto_approve,
                     )
                     docker_command = docker_mgr.build_run_command(
                         session.session_id, worktree_path, claude_cmd
@@ -171,7 +178,7 @@ def create(
                 session.tmux_session_name,
                 worktree_path,
                 Path(session.log_file),
-                instructions,
+                str(worktree_path),
                 prompt,
                 auto_approve=auto_approve,
                 docker_command=docker_command,
