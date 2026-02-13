@@ -14,6 +14,7 @@ from beehive.core.pr_creator import PRCreator
 from beehive.core.session import SessionManager, SessionStatus
 from beehive.core.tmux_manager import TmuxManager
 from beehive.core.config import BeehiveConfig
+from beehive.core.docker_manager import DockerManager
 
 console = Console()
 
@@ -33,6 +34,7 @@ def cli(ctx, data_dir: Path):
     ctx.obj["session_manager"] = SessionManager(data_dir)
     ctx.obj["tmux"] = TmuxManager()
     ctx.obj["config"] = BeehiveConfig(data_dir)
+    ctx.obj["docker"] = DockerManager()
 
 
 @cli.command()
@@ -63,6 +65,11 @@ def cli(ctx, data_dir: Path):
     type=click.Path(exists=True, path_type=Path),
     help="Project-specific CLAUDE.md file (merged with global template)",
 )
+@click.option(
+    "--no-docker",
+    is_flag=True,
+    help="Force host execution even when Docker is available",
+)
 @click.pass_context
 def create(
     ctx,
@@ -73,6 +80,7 @@ def create(
     prompt: Optional[str],
     auto_approve: bool,
     claude_md: Optional[Path],
+    no_docker: bool,
 ):
     """Create a new agent session."""
     # Check tmux
@@ -98,9 +106,17 @@ def create(
             sys.exit(1)
         instructions = instruction_file.read_text()
 
-    # Combine with global system prompt
+    # Determine whether to use Docker
+    docker_mgr = ctx.obj["docker"]
+    use_docker = auto_approve and not no_docker and docker_mgr.is_available()
+
+    # Combine with global system prompt (include deliverable instructions for auto-approve)
     config = ctx.obj["config"]
-    instructions = config.combine_prompts(instructions)
+    instructions = config.combine_prompts(
+        instructions,
+        base_branch=base_branch,
+        include_deliverable=auto_approve,
+    )
 
     # Parse prompt (file or string)
     if prompt and prompt.startswith("@"):
@@ -116,7 +132,8 @@ def create(
     try:
         with console.status("[bold green]Creating session..."):
             session = session_mgr.create_session(
-                name, instructions, working_dir, base_branch
+                name, instructions, working_dir, base_branch,
+                use_docker=use_docker,
             )
 
             # Create git worktree (isolated workspace)
@@ -130,6 +147,25 @@ def create(
                 shutil.copy2(claude_md, worktree_path / "CLAUDE.md")
             config.inject_claude_md(worktree_path)
 
+            # Build docker command if using Docker
+            docker_command = None
+            if use_docker:
+                if not docker_mgr.ensure_image():
+                    console.print("[yellow]Warning: Failed to build Docker image, falling back to host.[/yellow]")
+                    use_docker = False
+                    session_mgr.update_session(
+                        session.session_id,
+                        container_name=None,
+                        runtime="host",
+                    )
+                else:
+                    claude_cmd = TmuxManager._build_claude_command(
+                        instructions, prompt, auto_approve
+                    )
+                    docker_command = docker_mgr.build_run_command(
+                        session.session_id, worktree_path, claude_cmd
+                    )
+
             # Start tmux session in the worktree directory
             ctx.obj["tmux"].create_session(
                 session.tmux_session_name,
@@ -138,11 +174,14 @@ def create(
                 instructions,
                 prompt,
                 auto_approve=auto_approve,
+                docker_command=docker_command,
             )
 
+        runtime_label = "[magenta]Docker[/magenta]" if use_docker else "[dim]Host[/dim]"
         console.print(f"[green]✓[/green] Created session: [bold]{session.name}[/bold]")
         console.print(f"  ID: [cyan]{session.session_id}[/cyan]")
         console.print(f"  Branch: [yellow]{session.branch_name}[/yellow]")
+        console.print(f"  Runtime: {runtime_label}")
         console.print(f"  Worktree: [dim]{session.working_directory}[/dim]")
         console.print(f"  Logs: [dim]{session.log_file}[/dim]")
         console.print(
@@ -177,6 +216,7 @@ def list(ctx, status: Optional[str]):
     table.add_column("ID", style="cyan")
     table.add_column("Name")
     table.add_column("Status")
+    table.add_column("Runtime")
     table.add_column("Branch", style="dim")
     table.add_column("Created")
 
@@ -188,10 +228,16 @@ def list(ctx, status: Optional[str]):
             "stopped": "yellow",
         }.get(s.status, "white")
 
+        runtime_display = (
+            f"[magenta]docker[/magenta]" if s.runtime == "docker"
+            else f"[dim]host[/dim]"
+        )
+
         table.add_row(
             s.session_id,
             s.name,
             f"[{status_color}]{s.status}[/{status_color}]",
+            runtime_display,
             s.branch_name,
             s.created_at.strftime("%Y-%m-%d %H:%M"),
         )
@@ -332,6 +378,13 @@ def stop(ctx, session_id: str):
         console.print(f"[red]Session {session_id} not found[/red]")
         sys.exit(1)
 
+    # Stop Docker container if applicable
+    if session.runtime == "docker":
+        docker_mgr = ctx.obj["docker"]
+        if docker_mgr.container_running(session.session_id):
+            docker_mgr.stop_container(session.session_id)
+            console.print(f"[dim]Stopped container beehive-{session.session_id}[/dim]")
+
     if ctx.obj["tmux"].session_exists(session.tmux_session_name):
         ctx.obj["tmux"].kill_session(session.tmux_session_name)
         console.print(f"[green]✓[/green] Stopped [bold]{session.name}[/bold]")
@@ -357,6 +410,7 @@ def status(ctx, session_id: str):
     console.print(f"\n[bold]Session: {session.name}[/bold]")
     console.print(f"  ID: [cyan]{session.session_id}[/cyan]")
     console.print(f"  Status: [{session.status}]{session.status}[/{session.status}]")
+    console.print(f"  Runtime: {'[magenta]docker[/magenta]' if session.runtime == 'docker' else '[dim]host[/dim]'}")
     console.print(f"  Branch: [yellow]{session.branch_name}[/yellow]")
     console.print(f"  Original Repo: {session.original_repo}")
     console.print(f"  Worktree: {session.working_directory}")
@@ -370,6 +424,14 @@ def status(ctx, session_id: str):
         f"{session.tmux_session_name} ({'running' if tmux_running else 'stopped'})"
         f"[/{'green' if tmux_running else 'red'}]"
     )
+    if session.runtime == "docker":
+        docker_mgr = ctx.obj["docker"]
+        container_up = docker_mgr.container_running(session.session_id)
+        console.print(
+            f"  Container: [{'green' if container_up else 'red'}]"
+            f"{session.container_name} ({'running' if container_up else 'stopped'})"
+            f"[/{'green' if container_up else 'red'}]"
+        )
     console.print(f"  Log File: [dim]{session.log_file}[/dim]")
     if session.pr_url:
         console.print(f"  PR: [cyan]{session.pr_url}[/cyan]")
@@ -402,6 +464,12 @@ def delete(ctx, session_id: str, force: bool):
         if not confirm:
             console.print("Aborted.")
             return
+
+    # Stop Docker container if applicable
+    if session.runtime == "docker":
+        docker_mgr = ctx.obj["docker"]
+        if docker_mgr.container_running(session.session_id):
+            docker_mgr.stop_container(session.session_id)
 
     # Stop tmux session if running
     if ctx.obj["tmux"].session_exists(session.tmux_session_name):

@@ -33,6 +33,8 @@ class AgentSession(BaseModel):
     working_directory: str  # Git worktree path (isolated workspace)
     original_repo: str  # Original repository path
     pr_url: Optional[str] = None
+    container_name: Optional[str] = None  # e.g. "beehive-a1b2c3d4" or None
+    runtime: str = "host"  # "host" or "docker"
 
     model_config = ConfigDict(use_enum_values=True)
 
@@ -54,6 +56,7 @@ class SessionManager:
         instructions: str,
         working_dir: Path,
         base_branch: str = "main",
+        use_docker: bool = False,
     ) -> AgentSession:
         """Create new session with worktree and tmux session."""
         from beehive.core.git_ops import generate_branch_name
@@ -79,6 +82,8 @@ class SessionManager:
             log_file=str(log_file),
             working_directory=str(worktree_path),
             original_repo=str(working_dir),
+            container_name=f"beehive-{session_id}" if use_docker else None,
+            runtime="docker" if use_docker else "host",
         )
 
         # Save to storage

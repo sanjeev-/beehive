@@ -25,6 +25,27 @@ def test_session_creation():
     assert session.session_id is not None
     assert len(session.session_id) == 8
     assert session.original_repo == "/tmp/repo"
+    # Default values for new fields
+    assert session.container_name is None
+    assert session.runtime == "host"
+
+
+def test_session_creation_docker():
+    """Test creating a session with Docker fields."""
+    session = AgentSession(
+        name="docker-session",
+        branch_name="beehive/docker-a1b2",
+        instructions="Do something",
+        tmux_session_name="beehive-a1b2",
+        log_file="/tmp/test.log",
+        working_directory="/tmp/worktree",
+        original_repo="/tmp/repo",
+        container_name="beehive-a1b2",
+        runtime="docker",
+    )
+
+    assert session.container_name == "beehive-a1b2"
+    assert session.runtime == "docker"
 
 
 def test_session_manager_create():
@@ -42,6 +63,23 @@ def test_session_manager_create():
         assert session.tmux_session_name.startswith("beehive-")
         assert session.original_repo == "/tmp"
         assert "/worktrees/" in session.working_directory
+        assert session.container_name is None
+        assert session.runtime == "host"
+
+
+def test_session_manager_create_docker():
+    """Test session manager creation with Docker."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        manager = SessionManager(Path(tmpdir))
+        session = manager.create_session(
+            name="docker-test",
+            instructions="Test instructions",
+            working_dir=Path("/tmp"),
+            use_docker=True,
+        )
+
+        assert session.runtime == "docker"
+        assert session.container_name == f"beehive-{session.session_id}"
 
 
 def test_session_manager_get():

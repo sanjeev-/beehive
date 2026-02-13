@@ -25,7 +25,11 @@ def test_system_prompt_none_when_missing(config):
 
 
 def test_combine_prompts_without_system_prompt(config):
-    assert config.combine_prompts("Do X") == "Do X"
+    result = config.combine_prompts("Do X")
+    assert "TASK INSTRUCTIONS" in result
+    assert "Do X" in result
+    # Should NOT contain global rules section
+    assert "GLOBAL RULES" not in result
 
 
 def test_combine_prompts_with_system_prompt(config):
@@ -33,6 +37,19 @@ def test_combine_prompts_with_system_prompt(config):
     combined = config.combine_prompts("Do X")
     assert "Be concise." in combined
     assert "Do X" in combined
+
+
+def test_combine_prompts_with_deliverable(config):
+    combined = config.combine_prompts("Do X", base_branch="develop", include_deliverable=True)
+    assert "Do X" in combined
+    assert "DELIVERABLE" in combined
+    assert "git push -u origin HEAD" in combined
+    assert "--base develop" in combined
+
+
+def test_combine_prompts_without_deliverable(config):
+    combined = config.combine_prompts("Do X")
+    assert "DELIVERABLE" not in combined
 
 
 # --- get / set / path ---

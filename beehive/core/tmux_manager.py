@@ -18,6 +18,33 @@ class TmuxManager:
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
 
+    @staticmethod
+    def _build_claude_command(
+        instructions: str,
+        initial_prompt: Optional[str] = None,
+        auto_approve: bool = False,
+    ) -> str:
+        """Build the claude CLI command string.
+
+        Returns the raw command (unescaped for shell) that launches claude
+        with the given instructions and optional prompt.
+        """
+        escaped_instructions = instructions.replace('"', '\\"').replace("$", "\\$")
+
+        base_cmd = "unset CLAUDECODE && claude"
+        if auto_approve:
+            base_cmd += " --dangerously-skip-permissions"
+            base_cmd += " -p"
+        cmd = f'{base_cmd} --system-prompt "{escaped_instructions}"'
+
+        if auto_approve and initial_prompt:
+            escaped_prompt = initial_prompt.replace('"', '\\"').replace("$", "\\$")
+            cmd += f' "{escaped_prompt}"'
+        elif auto_approve:
+            cmd += ' "Execute the instructions in the system prompt."'
+
+        return cmd
+
     def create_session(
         self,
         session_name: str,
@@ -26,6 +53,7 @@ class TmuxManager:
         instructions: str,
         initial_prompt: Optional[str] = None,
         auto_approve: bool = False,
+        docker_command: Optional[str] = None,
     ) -> None:
         """
         Create a new tmux session running Claude Code.
@@ -33,8 +61,8 @@ class TmuxManager:
         Steps:
         1. Create detached tmux session
         2. Enable logging via pipe-pane
-        3. Send Claude Code command with instructions
-        4. Optionally send initial prompt
+        3. Send Claude Code command (or docker_command) with instructions
+        4. Optionally send initial prompt (interactive host mode only)
         """
         # Create tmux session
         subprocess.run(
@@ -63,35 +91,20 @@ class TmuxManager:
             check=True,
         )
 
-        # Start Claude Code with instructions
-        # Unset CLAUDECODE to allow nested sessions, then escape quotes in instructions
-        escaped_instructions = instructions.replace('"', '\\"').replace("$", "\\$")
-
-        # Build command with optional auto-approve flag
-        base_cmd = "unset CLAUDECODE && claude"
-        if auto_approve:
-            base_cmd += " --dangerously-skip-permissions"
-            # Use -p (print) mode for autonomous agents — skips onboarding
-            # and exits when the task is complete
-            base_cmd += " -p"
-        cmd = f'{base_cmd} --system-prompt "{escaped_instructions}"'
-
-        # In -p mode, the prompt is passed as a positional arg
-        if auto_approve and initial_prompt:
-            escaped_prompt = initial_prompt.replace('"', '\\"').replace("$", "\\$")
-            cmd += f' "{escaped_prompt}"'
-        elif auto_approve:
-            # No explicit prompt: tell Claude to execute the system prompt instructions
-            cmd += ' "Execute the instructions in the system prompt."'
+        if docker_command:
+            # Docker mode: send the pre-built docker run command
+            cmd = docker_command
+        else:
+            # Host mode: build the claude command locally
+            cmd = self._build_claude_command(instructions, initial_prompt, auto_approve)
 
         subprocess.run(
             ["tmux", "send-keys", "-t", session_name, cmd, "Enter"], check=True
         )
 
-        # Send initial prompt if provided (interactive mode only)
-        if not auto_approve and initial_prompt:
+        # Send initial prompt if provided (interactive host mode only)
+        if not docker_command and not auto_approve and initial_prompt:
             time.sleep(2)  # Wait for Claude to start
-            # Escape quotes in prompt
             escaped_prompt = initial_prompt.replace('"', '\\"').replace("$", "\\$")
             subprocess.run(
                 ["tmux", "send-keys", "-t", session_name, escaped_prompt, "Enter"],

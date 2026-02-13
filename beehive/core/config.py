@@ -7,6 +7,15 @@ from typing import Optional
 CLAUDE_MD_MARKER = "<!-- Beehive Agent Defaults -->"
 CLAUDE_MD_PROJECT_MARKER = "<!-- Project CLAUDE.md -->"
 
+AGENT_DELIVERABLE_INSTRUCTIONS = """
+When you have completed the task:
+1. git add -A && git commit -m "<descriptive message>"
+2. git push -u origin HEAD
+3. gh pr create --fill --base {base_branch}
+4. Print the PR URL as the last line of output
+These steps are MANDATORY. You must commit, push, and create a PR before finishing.
+""".strip()
+
 
 class BeehiveConfig:
     """Manages Beehive configuration including global system prompts."""
@@ -37,7 +46,12 @@ class BeehiveConfig:
         """Get the path to the system prompt file for editing."""
         return self.system_prompt_file
 
-    def combine_prompts(self, user_instructions: str) -> str:
+    def combine_prompts(
+        self,
+        user_instructions: str,
+        base_branch: str = "main",
+        include_deliverable: bool = False,
+    ) -> str:
         """
         Combine global system prompt with user instructions.
 
@@ -49,24 +63,41 @@ class BeehiveConfig:
         ---
         [TASK INSTRUCTIONS]
         <user instructions>
+
+        ---
+        [DELIVERABLE] (optional)
+        <commit + PR instructions>
         """
         system_prompt = self.get_system_prompt()
-        if not system_prompt:
-            return user_instructions
 
-        combined = f"""{'='*80}
-GLOBAL RULES - All agents must follow these rules:
-{'='*80}
+        parts = []
+        if system_prompt:
+            parts.append(
+                f"{'='*80}\n"
+                f"GLOBAL RULES - All agents must follow these rules:\n"
+                f"{'='*80}\n\n"
+                f"{system_prompt}"
+            )
 
-{system_prompt}
+        parts.append(
+            f"{'='*80}\n"
+            f"TASK INSTRUCTIONS:\n"
+            f"{'='*80}\n\n"
+            f"{user_instructions}"
+        )
 
-{'='*80}
-TASK INSTRUCTIONS:
-{'='*80}
+        if include_deliverable:
+            deliverable = AGENT_DELIVERABLE_INSTRUCTIONS.format(
+                base_branch=base_branch
+            )
+            parts.append(
+                f"{'='*80}\n"
+                f"DELIVERABLE - Complete these steps when done:\n"
+                f"{'='*80}\n\n"
+                f"{deliverable}"
+            )
 
-{user_instructions}
-"""
-        return combined
+        return "\n\n".join(parts) + "\n"
 
     def get_claude_md(self) -> Optional[str]:
         """Read the default CLAUDE.md template. Returns None if missing or empty."""
