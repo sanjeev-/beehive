@@ -15,6 +15,7 @@ from beehive.core.architect import Architect, ArchitectRepo, TicketStatus
 from beehive.core.architect_storage import ArchitectStorage
 from beehive.core.docker_manager import DockerManager
 from beehive.core.git_ops import GitOperations
+from beehive.core.preview import PreviewManager
 from beehive.core.project import Project
 from beehive.core.project_storage import ProjectStorage
 from beehive.core.researcher import ExperimentStatus, Researcher
@@ -49,6 +50,7 @@ class DataStore:
         self.architect_storage = ArchitectStorage(data_dir)
         self.project_storage = ProjectStorage(data_dir)
         self.researcher_storage = ResearcherStorage(data_dir)
+        self.preview_mgr = PreviewManager(data_dir)
         self.tmux = TmuxManager()
         self.docker = DockerManager()
 
@@ -205,6 +207,8 @@ class HomeView(Container):
             else "—"
         )
 
+        active_previews = len(store.preview_mgr.list_previews())
+
         stats_text = (
             f"[#999]Sessions today[/]    [bold #333]{today_sessions}[/]\n"
             f"[#999]Completed[/]         [#5a8a5a]{completed}[/]\n"
@@ -215,7 +219,8 @@ class HomeView(Container):
             f"[#999]Total tickets[/]     [bold #333]{total_tickets}[/]\n"
             f"[#999]Tickets done[/]      [#5a8a5a]{completed_tickets}[/]\n"
             f"[#999]Experiments[/]       [bold #333]{total_experiments}[/]\n"
-            f"[#999]Experiments done[/]  [#5a8a5a]{completed_experiments}[/]"
+            f"[#999]Experiments done[/]  [#5a8a5a]{completed_experiments}[/]\n"
+            f"[#999]Active previews[/]   [bold #333]{active_previews}[/]"
         )
         self.query_one("#stats-content", Static).update(stats_text)
 
@@ -385,6 +390,15 @@ class ProjectsView(Container):
             for r in p.repos:
                 desc = f" — {r.description}" if r.description else ""
                 lines.append(f"  [#555]{r.name}[/]  {r.path}{desc}")
+
+        if p.preview:
+            lines.append("")
+            lines.append("[#888]Preview config[/]")
+            lines.append(f"  [#777]Command: {p.preview.setup_command}[/]")
+            lines.append(f"  [#777]URL: {p.preview.url_template}[/]")
+            if p.preview.teardown_command:
+                lines.append(f"  [#777]Teardown: {p.preview.teardown_command}[/]")
+            lines.append(f"  [#777]Timeout: {p.preview.startup_timeout}s[/]")
 
         if p.architect_ids:
             lines.append("")
@@ -1210,6 +1224,8 @@ class AgentsView(Container):
             )
         if s.pr_url:
             lines.append(f"[#999]PR[/]         [#555]{s.pr_url}[/]")
+        if s.preview_url:
+            lines.append(f"[#999]Preview[/]    [#555]{s.preview_url}[/]")
 
         instr = s.instructions[:150].replace("\n", " ")
         lines.append(f"\n[#999]Task[/]  {instr}...")

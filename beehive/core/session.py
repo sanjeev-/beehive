@@ -33,6 +33,7 @@ class AgentSession(BaseModel):
     working_directory: str  # Git worktree path (isolated workspace)
     original_repo: str  # Original repository path
     pr_url: Optional[str] = None
+    preview_url: Optional[str] = None
     container_name: Optional[str] = None  # e.g. "beehive-a1b2c3d4" or None
     runtime: str = "host"  # "host" or "docker"
 

@@ -407,6 +407,13 @@ def stop(ctx, session_id: str):
         console.print(f"[red]Session {session_id} not found[/red]")
         sys.exit(1)
 
+    # Stop preview if running
+    from beehive.core.preview import PreviewManager
+
+    preview_mgr = PreviewManager(ctx.obj["data_dir"])
+    if preview_mgr.stop_preview(session.session_id):
+        console.print(f"[dim]Stopped preview for {session.session_id}[/dim]")
+
     # Stop Docker container if applicable
     if session.runtime == "docker":
         docker_mgr = ctx.obj["docker"]
@@ -464,6 +471,8 @@ def status(ctx, session_id: str):
     console.print(f"  Log File: [dim]{session.log_file}[/dim]")
     if session.pr_url:
         console.print(f"  PR: [cyan]{session.pr_url}[/cyan]")
+    if session.preview_url:
+        console.print(f"  Preview: [cyan]{session.preview_url}[/cyan]")
 
     console.print(f"\n[bold]Instructions:[/bold]")
     console.print(f"  {session.instructions[:200]}...")
@@ -493,6 +502,13 @@ def delete(ctx, session_id: str, force: bool):
         if not confirm:
             console.print("Aborted.")
             return
+
+    # Stop preview if running
+    from beehive.core.preview import PreviewManager
+
+    preview_mgr = PreviewManager(ctx.obj["data_dir"])
+    if preview_mgr.stop_preview(session.session_id):
+        console.print(f"[dim]Stopped preview for {session.session_id}[/dim]")
 
     # Stop Docker container if applicable
     if session.runtime == "docker":

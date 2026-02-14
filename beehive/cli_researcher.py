@@ -12,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from beehive.core.architect import ArchitectRepo
+from beehive.core.project_storage import ProjectStorage
 from beehive.core.researcher import ExperimentStatus, Researcher
 from beehive.core.researcher_storage import ResearcherStorage
 
@@ -395,6 +396,27 @@ def assign_experiments(ctx, researcher_id: str, experiment_id: Optional[str], as
             study.updated_at = datetime.utcnow()
             storage.save_study(res.researcher_id, study)
 
+            # Auto-start preview if project has preview config
+            try:
+                project = _find_project_for_researcher(res, data_dir)
+                if project and project.preview:
+                    from beehive.core.preview import PreviewManager
+
+                    preview_mgr = PreviewManager(data_dir)
+                    preview_url = preview_mgr.start_preview(
+                        session_id=session.session_id,
+                        task_name=experiment.title,
+                        working_directory=str(worktree_path),
+                        setup_command=project.preview.setup_command,
+                        teardown_command=project.preview.teardown_command,
+                        url_template=project.preview.url_template,
+                        startup_timeout=project.preview.startup_timeout,
+                    )
+                    session_mgr.update_session(session.session_id, preview_url=preview_url)
+                    console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
+            except Exception as e:
+                console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
+
             runtime_label = "docker" if use_docker else "host"
             console.print(
                 f"[green]\u2713[/green] Assigned [bold]{experiment.title}[/bold] "
@@ -476,6 +498,17 @@ def study_status(ctx, researcher_id: str, study_id: Optional[str]):
     console.print(f"  Status: {', '.join(summary_parts)}\n")
 
     _print_experiments_table(study.experiments)
+
+
+def _find_project_for_researcher(researcher, data_dir: Path):
+    """Find a project whose repos overlap with this researcher's repos."""
+    project_storage = ProjectStorage(data_dir)
+    researcher_paths = {r.path for r in researcher.repos}
+    for proj in project_storage.load_all_projects():
+        proj_paths = {r.path for r in proj.repos}
+        if researcher_paths & proj_paths:
+            return proj
+    return None
 
 
 def _print_experiments_table(experiments):

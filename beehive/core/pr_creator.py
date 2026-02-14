@@ -109,6 +109,10 @@ class PRCreator:
             body_parts.append(
                 f"**Created:** {session.created_at.strftime('%Y-%m-%d %H:%M')}\n"
             )
+            if session.preview_url:
+                body_parts.append(
+                    f"**Preview:** [{session.preview_url}]({session.preview_url})\n"
+                )
 
         # Get diff stats
         try:
