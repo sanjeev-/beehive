@@ -90,10 +90,10 @@ class DockerManager:
         # gh auth setup-git: configures git credential helper for HTTPS push
         # url rewrite: converts SSH remote URLs to HTTPS (gh handles auth)
         inner = (
-            "sudo /usr/local/bin/init-firewall.sh >/dev/null 2>&1"
-            " && gh auth setup-git 2>/dev/null"
-            ' && git config --global url."https://github.com/".insteadOf "git@github.com:"'
-            f" && {claude_cmd}"
+            "sudo /usr/local/bin/init-firewall.sh >/dev/null 2>&1;"
+            " gh auth setup-git 2>/dev/null || true;"
+            ' git config --global url.https://github.com/.insteadOf git@github.com: 2>/dev/null || true;'
+            f" {claude_cmd}"
         )
 
         parts.extend([
