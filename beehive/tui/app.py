@@ -623,7 +623,7 @@ class ArchitectsView(Container):
         self._set_columns(table, "plans", ("Id", "Directive", "Tickets", "Pending", "Done", "Failed"))
         for p in a.plans:
             pending = sum(1 for t in p.tickets if t.status in (TicketStatus.PENDING, "pending"))
-            done = sum(1 for t in p.tickets if t.status in (TicketStatus.COMPLETED, "completed"))
+            done = sum(1 for t in p.tickets if t.status in (TicketStatus.COMPLETED, "completed", TicketStatus.MERGED, "merged"))
             failed = sum(1 for t in p.tickets if t.status in (TicketStatus.FAILED, "failed"))
             directive = p.directive[:50] + ("..." if len(p.directive) > 50 else "")
             table.add_row(
@@ -648,18 +648,24 @@ class ArchitectsView(Container):
             f"Architects  \u203a  [bold #333]{a.name}[/]  \u203a  Plans  \u203a  [bold #333]{p.plan_id[:8]}[/]"
         )
         table = self.query_one("#arch-table", DataTable)
-        self._set_columns(table, "tickets", ("Id", "Title", "Repo", "Status", "Session", "PR"))
-        for t in p.tickets:
+        self._set_columns(table, "tickets", ("#", "Id", "Title", "Repo", "Status", "Branch", "Session", "PR"))
+        self._sorted_tickets = sorted(p.tickets, key=lambda t: t.order)
+        for t in self._sorted_tickets:
             status_display = {
                 "pending": "[#c49b00]pending[/]",
                 "assigned": "[#5577bb]assigned[/]",
                 "in_progress": "[#c49b00]in progress[/]",
                 "completed": "[#5a8a5a]completed[/]",
                 "failed": "[#b84040]failed[/]",
+                "merged": "[#55bbbb]merged[/]",
             }.get(str(t.status), str(t.status))
+            branch = t.branch_name or "—"
+            if len(branch) > 25:
+                branch = branch[:22] + "..."
             table.add_row(
+                str(t.order) if t.order else "—",
                 t.ticket_id[:8], t.title[:30], t.repo,
-                status_display, t.session_id or "—", t.pr_url or "—",
+                status_display, branch, t.session_id or "—", t.pr_url or "—",
             )
 
         detail = (
@@ -794,8 +800,9 @@ class ArchitectsView(Container):
         try:
             table = self.query_one("#arch-table", DataTable)
             idx = table.cursor_row
-            if 0 <= idx < len(self._selected_plan.tickets):
-                ticket = self._selected_plan.tickets[idx]
+            sorted_tickets = getattr(self, "_sorted_tickets", self._selected_plan.tickets)
+            if 0 <= idx < len(sorted_tickets):
+                ticket = sorted_tickets[idx]
                 self.app.push_screen(
                     EditTicketModal(ticket),
                     callback=lambda result: self._do_edit_ticket(ticket, result) if result else None,

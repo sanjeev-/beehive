@@ -1,5 +1,6 @@
 """CLI commands for the Architect feature."""
 
+import json
 import subprocess
 import sys
 from datetime import datetime
@@ -240,15 +241,156 @@ def edit_ticket(ctx, ticket_id: str, title: Optional[str], description: Optional
     console.print(f"[green]✓[/green] Updated ticket [cyan]{ticket.ticket_id}[/cyan]")
 
 
+def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
+                          session_mgr, tmux, config, docker_mgr,
+                          auto_approve, no_docker) -> Optional[str]:
+    """Assign a single ticket: create session, worktree, tmux. Returns session_id or None."""
+    from beehive.core.git_ops import GitOperations
+    from beehive.core.tmux_manager import TmuxManager
+
+    repo_config = next((r for r in arch.repos if r.name == ticket.repo), None)
+    if not repo_config:
+        console.print(f"[red]Repo '{ticket.repo}' not found in architect config[/red]")
+        return None
+
+    repo_path = Path(repo_config.path)
+    git = GitOperations(repo_path)
+    if not git.is_git_repo():
+        console.print(f"[red]Error: {repo_path} is not a git repository[/red]")
+        return None
+
+    try:
+        use_docker = auto_approve and not no_docker and docker_mgr.is_available()
+
+        instructions = config.combine_prompts(
+            ticket.description,
+            base_branch=repo_config.base_branch,
+            include_deliverable=auto_approve,
+        )
+
+        session = session_mgr.create_session(
+            name=ticket.title,
+            instructions=instructions,
+            working_dir=repo_path,
+            base_branch=repo_config.base_branch,
+            use_docker=use_docker,
+        )
+
+        worktree_path = Path(session.working_directory)
+        if use_docker:
+            git.clone_for_docker(session.branch_name, worktree_path, repo_config.base_branch)
+        else:
+            git.create_worktree(session.branch_name, worktree_path, repo_config.base_branch)
+
+        project_claude_md = None
+        try:
+            project = _find_project_for_architect(arch.architect_id, data_dir)
+            if project:
+                project_storage = ProjectStorage(data_dir)
+                project_claude_md = project_storage.get_project_claude_md(
+                    project.project_id
+                )
+        except Exception:
+            pass
+        config.inject_claude_md(worktree_path, project_claude_md=project_claude_md)
+
+        (worktree_path / ".beehive-system-prompt.txt").write_text(instructions)
+
+        if use_docker:
+            git_name = subprocess.run(
+                ["git", "config", "user.name"],
+                capture_output=True, text=True,
+            ).stdout.strip() or "Beehive Agent"
+            git_email = subprocess.run(
+                ["git", "config", "user.email"],
+                capture_output=True, text=True,
+            ).stdout.strip() or "agent@beehive"
+            (worktree_path / ".beehive-gitconfig").write_text(
+                f"[user]\n\tname = {git_name}\n\temail = {git_email}\n"
+            )
+
+        docker_command = None
+        if use_docker:
+            if not docker_mgr.ensure_image():
+                console.print(f"[yellow]Warning: Docker image build failed, falling back to host for {ticket.title}[/yellow]")
+                use_docker = False
+                session_mgr.update_session(
+                    session.session_id,
+                    container_name=None,
+                    runtime="host",
+                )
+            else:
+                claude_cmd = TmuxManager._build_claude_command(
+                    "/workspace",
+                    has_initial_prompt=False,
+                    auto_approve=auto_approve,
+                )
+                docker_command = docker_mgr.build_run_command(
+                    session.session_id, worktree_path, claude_cmd
+                )
+
+        tmux.create_session(
+            session.tmux_session_name,
+            worktree_path,
+            Path(session.log_file),
+            str(worktree_path),
+            None,
+            auto_approve=auto_approve,
+            docker_command=docker_command,
+        )
+
+        ticket.status = TicketStatus.ASSIGNED
+        ticket.session_id = session.session_id
+        ticket.branch_name = session.branch_name
+        ticket.updated_at = datetime.utcnow()
+        plan.updated_at = datetime.utcnow()
+        storage.save_plan(arch.architect_id, plan)
+
+        try:
+            project = _find_project_for_architect(arch.architect_id, data_dir)
+            if project and project.preview:
+                from beehive.core.preview import PreviewManager
+
+                preview_mgr = PreviewManager(data_dir)
+                preview_url = preview_mgr.start_preview(
+                    session_id=session.session_id,
+                    task_name=ticket.title,
+                    working_directory=str(worktree_path),
+                    setup_command=project.preview.setup_command,
+                    teardown_command=project.preview.teardown_command,
+                    url_template=project.preview.url_template,
+                    startup_timeout=project.preview.startup_timeout,
+                )
+                session_mgr.update_session(session.session_id, preview_url=preview_url)
+                console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
+        except Exception as e:
+            console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
+
+        runtime_label = "docker" if use_docker else "host"
+        console.print(
+            f"[green]✓[/green] Assigned [bold]{ticket.title}[/bold] "
+            f"-> session [cyan]{session.session_id}[/cyan] ({runtime_label})"
+        )
+        return session.session_id
+
+    except Exception as e:
+        console.print(f"[red]Error assigning '{ticket.title}': {e}[/red]")
+        return None
+
+
 @architect.command("assign")
 @click.argument("architect_id")
 @click.option("--ticket", "-t", "ticket_id", help="Assign specific ticket by ID")
-@click.option("--all", "-a", "assign_all", is_flag=True, default=True, help="Assign all pending tickets (default)")
+@click.option("--parallel", is_flag=True, default=False, help="Assign all pending tickets at once")
 @click.option("--no-auto-approve", is_flag=True, help="Disable auto-approve (-y)")
 @click.option("--no-docker", is_flag=True, help="Force host execution")
 @click.pass_context
-def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], assign_all: bool, no_auto_approve: bool, no_docker: bool):
-    """Assign tickets to beehive agent sessions."""
+def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], parallel: bool, no_auto_approve: bool, no_docker: bool):
+    """Assign tickets to beehive agent sessions.
+
+    Default (sequential): assigns only the first pending ticket by order.
+    --parallel: assigns all pending tickets at once.
+    """
     storage = ctx.obj["architect_storage"]
     arch = storage.load_architect(architect_id)
 
@@ -260,10 +402,8 @@ def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], assign_all:
         console.print("[red]No plans found. Run 'architect plan' first.[/red]")
         sys.exit(1)
 
-    # Get the latest plan
     plan = arch.plans[-1]
 
-    # Determine which tickets to assign
     if ticket_id:
         result = storage.find_ticket(arch.architect_id, ticket_id)
         if not result:
@@ -272,21 +412,28 @@ def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], assign_all:
         plan, ticket = result
         tickets_to_assign = [ticket]
     else:
-        # Assign all pending tickets
-        tickets_to_assign = [t for t in plan.tickets if t.status == TicketStatus.PENDING]
+        pending = [t for t in plan.tickets if t.status == TicketStatus.PENDING]
+        pending.sort(key=lambda t: t.order)
+        if parallel:
+            tickets_to_assign = pending
+        else:
+            # Sequential: only the first pending ticket by order
+            tickets_to_assign = pending[:1]
 
     if not tickets_to_assign:
         console.print("[dim]No pending tickets to assign.[/dim]")
         return
 
+    # Store execution mode on plan
+    plan.execution_mode = "parallel" if parallel else "sequential"
+    storage.save_plan(arch.architect_id, plan)
+
     auto_approve = not no_auto_approve
 
-    # Import session management
     from beehive.core.session import SessionManager
-    from beehive.core.git_ops import GitOperations
-    from beehive.core.tmux_manager import TmuxManager
     from beehive.core.config import BeehiveConfig
     from beehive.core.docker_manager import DockerManager
+    from beehive.core.tmux_manager import TmuxManager
 
     data_dir = ctx.obj.get("data_dir", Path.home() / ".beehive")
     session_mgr = ctx.obj.get("session_manager", SessionManager(data_dir))
@@ -299,134 +446,11 @@ def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], assign_all:
         sys.exit(1)
 
     for ticket in tickets_to_assign:
-        # Find repo config
-        repo_config = next((r for r in arch.repos if r.name == ticket.repo), None)
-        if not repo_config:
-            console.print(f"[red]Repo '{ticket.repo}' not found in architect config[/red]")
-            continue
-
-        repo_path = Path(repo_config.path)
-        git = GitOperations(repo_path)
-        if not git.is_git_repo():
-            console.print(f"[red]Error: {repo_path} is not a git repository[/red]")
-            continue
-
-        try:
-            # Determine whether to use Docker
-            use_docker = auto_approve and not no_docker and docker_mgr.is_available()
-
-            # Combine instructions with global prompt
-            instructions = config.combine_prompts(
-                ticket.description,
-                base_branch=repo_config.base_branch,
-                include_deliverable=auto_approve,
-            )
-
-            # Create session
-            session = session_mgr.create_session(
-                name=ticket.title,
-                instructions=instructions,
-                working_dir=repo_path,
-                base_branch=repo_config.base_branch,
-                use_docker=use_docker,
-            )
-
-            # Create isolated workspace
-            worktree_path = Path(session.working_directory)
-            if use_docker:
-                git.clone_for_docker(session.branch_name, worktree_path, repo_config.base_branch)
-            else:
-                git.create_worktree(session.branch_name, worktree_path, repo_config.base_branch)
-
-            # Inject CLAUDE.md
-            config.inject_claude_md(worktree_path)
-
-            # Write prompt files
-            (worktree_path / ".beehive-system-prompt.txt").write_text(instructions)
-
-            # Prepare Docker gitconfig
-            if use_docker:
-                git_name = subprocess.run(
-                    ["git", "config", "user.name"],
-                    capture_output=True, text=True,
-                ).stdout.strip() or "Beehive Agent"
-                git_email = subprocess.run(
-                    ["git", "config", "user.email"],
-                    capture_output=True, text=True,
-                ).stdout.strip() or "agent@beehive"
-                (worktree_path / ".beehive-gitconfig").write_text(
-                    f"[user]\n\tname = {git_name}\n\temail = {git_email}\n"
-                )
-
-            # Build docker command if using Docker
-            docker_command = None
-            if use_docker:
-                if not docker_mgr.ensure_image():
-                    console.print(f"[yellow]Warning: Docker image build failed, falling back to host for {ticket.title}[/yellow]")
-                    use_docker = False
-                    session_mgr.update_session(
-                        session.session_id,
-                        container_name=None,
-                        runtime="host",
-                    )
-                else:
-                    claude_cmd = TmuxManager._build_claude_command(
-                        "/workspace",
-                        has_initial_prompt=False,
-                        auto_approve=auto_approve,
-                    )
-                    docker_command = docker_mgr.build_run_command(
-                        session.session_id, worktree_path, claude_cmd
-                    )
-
-            # Start tmux session
-            tmux.create_session(
-                session.tmux_session_name,
-                worktree_path,
-                Path(session.log_file),
-                str(worktree_path),
-                None,  # no initial prompt
-                auto_approve=auto_approve,
-                docker_command=docker_command,
-            )
-
-            # Update ticket
-            ticket.status = TicketStatus.ASSIGNED
-            ticket.session_id = session.session_id
-            ticket.updated_at = datetime.utcnow()
-            plan.updated_at = datetime.utcnow()
-            storage.save_plan(arch.architect_id, plan)
-
-            # Auto-start preview if project has preview config
-            try:
-                project = _find_project_for_architect(arch.architect_id, data_dir)
-                if project and project.preview:
-                    from beehive.core.preview import PreviewManager
-
-                    preview_mgr = PreviewManager(data_dir)
-                    preview_url = preview_mgr.start_preview(
-                        session_id=session.session_id,
-                        task_name=ticket.title,
-                        working_directory=str(worktree_path),
-                        setup_command=project.preview.setup_command,
-                        teardown_command=project.preview.teardown_command,
-                        url_template=project.preview.url_template,
-                        startup_timeout=project.preview.startup_timeout,
-                    )
-                    session_mgr.update_session(session.session_id, preview_url=preview_url)
-                    console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
-            except Exception as e:
-                console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
-
-            runtime_label = "docker" if use_docker else "host"
-            console.print(
-                f"[green]✓[/green] Assigned [bold]{ticket.title}[/bold] "
-                f"-> session [cyan]{session.session_id}[/cyan] ({runtime_label})"
-            )
-
-        except Exception as e:
-            console.print(f"[red]Error assigning '{ticket.title}': {e}[/red]")
-            continue
+        _assign_single_ticket(
+            ticket, plan, arch, storage, data_dir,
+            session_mgr, tmux, config, docker_mgr,
+            auto_approve, no_docker,
+        )
 
 
 @architect.command("status")
@@ -459,6 +483,45 @@ def plan_status(ctx, architect_id: str, plan_id: Optional[str]):
     data_dir = ctx.obj.get("data_dir", Path.home() / ".beehive")
     session_mgr = ctx.obj.get("session_manager", SessionManager(data_dir))
 
+    synced = _sync_tickets_from_sessions(plan, session_mgr)
+    if synced:
+        plan.updated_at = datetime.utcnow()
+        storage.save_plan(arch.architect_id, plan)
+
+    # Summary
+    counts = {}
+    for t in plan.tickets:
+        counts[t.status] = counts.get(t.status, 0) + 1
+
+    summary_parts = []
+    for status_val in ["pending", "assigned", "in_progress", "completed", "merged", "failed"]:
+        count = counts.get(status_val, 0)
+        if count > 0:
+            summary_parts.append(f"{count} {status_val}")
+
+    console.print(f"\n[bold]Plan {plan.plan_id}[/bold]: {plan.directive}")
+    console.print(f"  Status: {', '.join(summary_parts)}\n")
+
+    _print_tickets_table(plan.tickets)
+
+
+def _check_pr_merged(pr_url: str) -> bool:
+    """Check if a GitHub PR is merged via `gh pr view`."""
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "view", pr_url, "--json", "state"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            return data.get("state") == "MERGED"
+    except Exception:
+        pass
+    return False
+
+
+def _sync_tickets_from_sessions(plan, session_mgr) -> bool:
+    """Sync ticket statuses and PR URLs from beehive sessions. Returns True if any changes."""
     synced = False
     for ticket in plan.tickets:
         if ticket.status in (TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS) and ticket.session_id:
@@ -479,26 +542,114 @@ def plan_status(ctx, architect_id: str, plan_id: Optional[str]):
                 ticket.pr_url = session.pr_url
                 ticket.updated_at = datetime.utcnow()
                 synced = True
+    return synced
 
-    if synced:
-        plan.updated_at = datetime.utcnow()
-        storage.save_plan(arch.architect_id, plan)
 
-    # Summary
-    counts = {}
-    for t in plan.tickets:
-        counts[t.status] = counts.get(t.status, 0) + 1
+@architect.command("watch")
+@click.argument("architect_id")
+@click.option("--plan", "-p", "plan_id", help="Specific plan ID (defaults to latest)")
+@click.option("--interval", "-i", default=15, help="Polling interval in seconds")
+@click.pass_context
+def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
+    """Watch plan execution: sync statuses, detect merges, auto-assign next ticket."""
+    import time
 
-    summary_parts = []
-    for status_val in ["pending", "assigned", "in_progress", "completed", "failed"]:
-        count = counts.get(status_val, 0)
-        if count > 0:
-            summary_parts.append(f"{count} {status_val}")
+    storage = ctx.obj["architect_storage"]
+    arch = storage.load_architect(architect_id)
 
-    console.print(f"\n[bold]Plan {plan.plan_id}[/bold]: {plan.directive}")
-    console.print(f"  Status: {', '.join(summary_parts)}\n")
+    if not arch:
+        console.print(f"[red]Architect {architect_id} not found[/red]")
+        sys.exit(1)
 
-    _print_tickets_table(plan.tickets)
+    if plan_id:
+        plan = storage.load_plan(arch.architect_id, plan_id)
+        if not plan:
+            console.print(f"[red]Plan {plan_id} not found[/red]")
+            sys.exit(1)
+    else:
+        if not arch.plans:
+            console.print("[dim]No plans found.[/dim]")
+            return
+        plan = arch.plans[-1]
+
+    from beehive.core.session import SessionManager
+    from beehive.core.config import BeehiveConfig
+    from beehive.core.docker_manager import DockerManager
+    from beehive.core.tmux_manager import TmuxManager
+
+    data_dir = ctx.obj.get("data_dir", Path.home() / ".beehive")
+    session_mgr = ctx.obj.get("session_manager", SessionManager(data_dir))
+    tmux = ctx.obj.get("tmux", TmuxManager())
+    config = ctx.obj.get("config", BeehiveConfig(data_dir))
+    docker_mgr = ctx.obj.get("docker", DockerManager())
+
+    console.print(f"[bold]Watching plan {plan.plan_id}[/bold] (mode: {plan.execution_mode}, interval: {interval}s)")
+    console.print("Press Ctrl+C to stop.\n")
+
+    try:
+        while True:
+            # 1. Sync session status → ticket status
+            synced = _sync_tickets_from_sessions(plan, session_mgr)
+
+            # 2. Check for merged PRs
+            for ticket in plan.tickets:
+                if ticket.pr_url and ticket.status in (
+                    TicketStatus.COMPLETED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS
+                ):
+                    if _check_pr_merged(ticket.pr_url):
+                        ticket.status = TicketStatus.MERGED
+                        ticket.updated_at = datetime.utcnow()
+                        synced = True
+                        console.print(
+                            f"[cyan]✓[/cyan] Ticket [bold]{ticket.title}[/bold] PR merged!"
+                        )
+
+            if synced:
+                plan.updated_at = datetime.utcnow()
+                storage.save_plan(arch.architect_id, plan)
+
+            # 3. In sequential mode: auto-assign next ticket if none in-flight
+            if plan.execution_mode == "sequential":
+                in_flight = [
+                    t for t in plan.tickets
+                    if t.status in (TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.COMPLETED)
+                ]
+                if not in_flight:
+                    pending = sorted(
+                        [t for t in plan.tickets if t.status == TicketStatus.PENDING],
+                        key=lambda t: t.order,
+                    )
+                    if pending:
+                        next_ticket = pending[0]
+                        console.print(
+                            f"\n[bold]Auto-assigning next ticket:[/bold] #{next_ticket.order} {next_ticket.title}"
+                        )
+                        _assign_single_ticket(
+                            next_ticket, plan, arch, storage, data_dir,
+                            session_mgr, tmux, config, docker_mgr,
+                            True, False,
+                        )
+
+            # 4. Check if all tickets are terminal
+            terminal_statuses = {TicketStatus.MERGED, TicketStatus.FAILED}
+            all_terminal = all(t.status in terminal_statuses for t in plan.tickets)
+            if all_terminal:
+                console.print("\n[green bold]All tickets are terminal (merged or failed). Done![/green bold]")
+                _print_tickets_table(plan.tickets)
+                break
+
+            # Show brief status
+            counts = {}
+            for t in plan.tickets:
+                counts[t.status] = counts.get(t.status, 0) + 1
+            parts = [f"{v} {k}" for k, v in counts.items()]
+            console.print(f"[dim]{', '.join(parts)}[/dim]")
+
+            time.sleep(interval)
+
+    except KeyboardInterrupt:
+        console.print("\n[dim]Watch stopped.[/dim]")
+        _print_tickets_table(plan.tickets)
 
 
 def _find_project_for_architect(architect_id: str, data_dir: Path):
@@ -513,10 +664,12 @@ def _find_project_for_architect(architect_id: str, data_dir: Path):
 def _print_tickets_table(tickets):
     """Print a Rich table of tickets."""
     table = Table()
+    table.add_column("#", style="dim")
     table.add_column("ID", style="cyan")
     table.add_column("Title")
     table.add_column("Repo")
     table.add_column("Status")
+    table.add_column("Branch", style="dim")
     table.add_column("Session", style="dim")
     table.add_column("PR", style="dim")
 
@@ -526,15 +679,19 @@ def _print_tickets_table(tickets):
         "in_progress": "green",
         "completed": "green",
         "failed": "red",
+        "merged": "cyan",
     }
 
-    for t in tickets:
+    sorted_tickets = sorted(tickets, key=lambda t: t.order)
+    for t in sorted_tickets:
         color = status_colors.get(t.status, "white")
         table.add_row(
+            str(t.order) if t.order else "—",
             t.ticket_id,
             t.title,
             t.repo,
             f"[{color}]{t.status}[/{color}]",
+            t.branch_name or "",
             t.session_id or "",
             t.pr_url or "",
         )
