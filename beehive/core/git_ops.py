@@ -129,6 +129,50 @@ class GitOperations:
             "worktree", "add", "-b", branch_name, str(worktree_path), base
         )
 
+    def clone_for_docker(
+        self, branch_name: str, clone_path: Path, base_branch: str = "main"
+    ) -> None:
+        """Clone the repo into a standalone directory for Docker mounting.
+
+        Git worktrees use absolute host paths in their .git file, which
+        break inside containers.  A plain clone gives us a self-contained
+        .git directory that works when mounted at any path.
+        """
+        clone_path = Path(clone_path).resolve()
+
+        # Clone from local repo (fast, no network)
+        subprocess.run(
+            [
+                "git", "clone",
+                "--branch", base_branch,
+                "--single-branch",
+                str(self.repo_path),
+                str(clone_path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        # Set the remote to the original repo's remote (not the local path)
+        result = self._run_git("remote", "get-url", "origin", check=False)
+        if result.returncode == 0 and result.stdout.strip():
+            remote_url = result.stdout.strip()
+            subprocess.run(
+                ["git", "-C", str(clone_path), "remote", "set-url", "origin", remote_url],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+        # Create the feature branch
+        subprocess.run(
+            ["git", "-C", str(clone_path), "checkout", "-b", branch_name],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
     def remove_worktree(self, worktree_path: Path, force: bool = False) -> None:
         """
         Remove a git worktree.

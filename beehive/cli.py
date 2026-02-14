@@ -136,9 +136,14 @@ def create(
                 use_docker=use_docker,
             )
 
-            # Create git worktree (isolated workspace)
+            # Create isolated workspace
             worktree_path = Path(session.working_directory)
-            git.create_worktree(session.branch_name, worktree_path, base_branch)
+            if use_docker:
+                # Docker: clone repo (worktrees use host paths that break in containers)
+                git.clone_for_docker(session.branch_name, worktree_path, base_branch)
+            else:
+                # Host: use git worktree (faster, shares .git)
+                git.create_worktree(session.branch_name, worktree_path, base_branch)
 
             # Copy project-specific CLAUDE.md into worktree, then
             # prepend global template on top (merge)
@@ -151,6 +156,20 @@ def create(
             (worktree_path / ".beehive-system-prompt.txt").write_text(instructions)
             if auto_approve and prompt:
                 (worktree_path / ".beehive-prompt.txt").write_text(prompt)
+
+            # Prepare Docker-specific gitconfig (writable, with user identity)
+            if use_docker:
+                git_name = subprocess.run(
+                    ["git", "config", "user.name"],
+                    capture_output=True, text=True,
+                ).stdout.strip() or "Beehive Agent"
+                git_email = subprocess.run(
+                    ["git", "config", "user.email"],
+                    capture_output=True, text=True,
+                ).stdout.strip() or "agent@beehive"
+                (worktree_path / ".beehive-gitconfig").write_text(
+                    f"[user]\n\tname = {git_name}\n\temail = {git_email}\n"
+                )
 
             # Build docker command if using Docker
             docker_command = None
@@ -482,15 +501,22 @@ def delete(ctx, session_id: str, force: bool):
     if ctx.obj["tmux"].session_exists(session.tmux_session_name):
         ctx.obj["tmux"].kill_session(session.tmux_session_name)
 
-    # Remove git worktree
+    # Remove workspace (worktree for host, cloned dir for docker)
     try:
-        git = GitOperations(Path(session.original_repo))
         worktree_path = Path(session.working_directory)
-        if git.worktree_exists(worktree_path):
-            git.remove_worktree(worktree_path, force=True)
-            console.print(f"[dim]Removed worktree: {worktree_path}[/dim]")
+        if session.runtime == "docker":
+            # Docker sessions use a cloned repo — just remove the directory
+            import shutil
+            if worktree_path.exists():
+                shutil.rmtree(worktree_path)
+                console.print(f"[dim]Removed clone: {worktree_path}[/dim]")
+        else:
+            git = GitOperations(Path(session.original_repo))
+            if git.worktree_exists(worktree_path):
+                git.remove_worktree(worktree_path, force=True)
+                console.print(f"[dim]Removed worktree: {worktree_path}[/dim]")
     except Exception as e:
-        console.print(f"[yellow]Warning: Could not remove worktree: {e}[/yellow]")
+        console.print(f"[yellow]Warning: Could not remove workspace: {e}[/yellow]")
 
     # Delete from storage
     ctx.obj["session_manager"].delete_session(session_id)
