@@ -1,0 +1,440 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Beehive TUI — Design system
+   Light cream dominant, muted grays, bold yellow accent (sparingly)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+Screen {
+    background: #f4f1ec;
+}
+
+/* ─── Header ──────────────────────────────────────────────────────────────── */
+
+#header {
+    dock: top;
+    height: 3;
+    background: #1e1e1e;
+    color: #FFD700;
+    text-style: bold;
+    content-align: left middle;
+    padding: 0 3;
+    border-bottom: solid #333333;
+}
+
+/* ─── Footer ─────────────────────────────────────────────────────────────── */
+
+Footer {
+    background: #e8e5df;
+    color: #555555;
+}
+
+FooterKey {
+    background: #e8e5df;
+    color: #555555;
+}
+
+FooterKey .footer-key--key {
+    background: #d5d2cb;
+    color: #333333;
+}
+
+FooterKey .footer-key--description {
+    background: #e8e5df;
+    color: #666666;
+}
+
+/* ─── Body layout ─────────────────────────────────────────────────────────── */
+
+#body {
+    height: 1fr;
+}
+
+/* ─── Sidebar ─────────────────────────────────────────────────────────────── */
+
+#sidebar {
+    width: 24;
+    background: #eae8e3;
+    border-right: solid #d5d2cb;
+    padding: 2 0;
+}
+
+#sidebar-title {
+    color: #999999;
+    text-style: bold;
+    padding: 0 3;
+    margin-bottom: 2;
+}
+
+NavItem {
+    padding: 1 3;
+    color: #888888;
+    width: 100%;
+}
+
+NavItem:hover {
+    background: #e0ddd6;
+    color: #555555;
+}
+
+NavItem.active {
+    background: #f8f3e2;
+    color: #b8960a;
+    text-style: bold;
+    border-left: tall #c49b00;
+}
+
+/* ─── Main content area ───────────────────────────────────────────────────── */
+
+#main {
+    width: 1fr;
+    padding: 2 3;
+}
+
+.hidden {
+    display: none;
+}
+
+.visible {
+    display: block;
+}
+
+/* ─── Home view ───────────────────────────────────────────────────────────── */
+
+#home-view {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#cards-row {
+    height: 7;
+    margin-bottom: 2;
+}
+
+#cards-row > SummaryCard {
+    width: 1fr;
+    height: 7;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    content-align: center middle;
+    margin: 0 1 0 0;
+    padding: 1 0;
+}
+
+#cards-row > SummaryCard:last-of-type {
+    margin-right: 0;
+}
+
+#home-body {
+    height: 1fr;
+}
+
+#stats-panel {
+    width: 34;
+    height: 1fr;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    padding: 2 3;
+    margin-right: 2;
+    overflow: hidden;
+}
+
+#stats-title {
+    color: #888888;
+    text-style: bold;
+    margin-bottom: 2;
+}
+
+#activity-panel {
+    width: 1fr;
+    height: 1fr;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    padding: 2 3;
+    overflow: hidden;
+}
+
+#activity-title {
+    color: #888888;
+    text-style: bold;
+    margin-bottom: 2;
+}
+
+/* ─── Projects view ──────────────────────────────────────────────────────── */
+
+#projects-view {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#projects-title {
+    color: #888888;
+    text-style: bold;
+    margin-bottom: 2;
+    height: 1;
+}
+
+#projects-body {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#projects-table {
+    width: 58%;
+    height: 1fr;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    margin-right: 2;
+}
+
+#project-detail-panel {
+    width: 42%;
+    height: 1fr;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    padding: 2 3;
+}
+
+/* ─── Architects view ────────────────────────────────────────────────────── */
+
+#architects-view {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#arch-breadcrumb {
+    color: #888888;
+    text-style: bold;
+    margin-bottom: 2;
+    height: 1;
+}
+
+#arch-table {
+    height: 1fr;
+    max-height: 60%;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    margin-bottom: 2;
+}
+
+#arch-detail {
+    height: auto;
+    max-height: 40%;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    padding: 2 3;
+}
+
+/* ─── Researchers view ────────────────────────────────────────────────────── */
+
+#researchers-view {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#researcher-breadcrumb {
+    color: #888888;
+    text-style: bold;
+    margin-bottom: 2;
+    height: 1;
+}
+
+#researcher-table {
+    height: 1fr;
+    max-height: 60%;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    margin-bottom: 2;
+}
+
+#researcher-detail {
+    height: auto;
+    max-height: 40%;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    padding: 2 3;
+}
+
+/* ─── Agents view ─────────────────────────────────────────────────────────── */
+
+#agents-view {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#agents-title {
+    color: #888888;
+    text-style: bold;
+    margin-bottom: 2;
+    height: 1;
+}
+
+#agents-body {
+    height: 1fr;
+    overflow: hidden;
+}
+
+#agents-table {
+    width: 58%;
+    height: 1fr;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    margin-right: 2;
+}
+
+#agent-detail-panel {
+    width: 42%;
+    height: 1fr;
+    background: #faf9f6;
+    border: round #d5d2cb;
+    padding: 2 3;
+}
+
+/* ─── DataTable styling ───────────────────────────────────────────────────── */
+
+DataTable {
+    background: #faf9f6;
+}
+
+DataTable > .datatable--header {
+    background: #f0ede8;
+    color: #666666;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: #faf3d0;
+    color: #333333;
+}
+
+DataTable > .datatable--hover {
+    background: #f2efea;
+}
+
+DataTable > .datatable--even-row {
+    background: #faf9f6;
+}
+
+DataTable > .datatable--odd-row {
+    background: #f5f3ee;
+}
+
+/* ─── Modal dialogs ──────────────────────────────────────────────────────── */
+
+ConfirmModal, SendPromptModal, LinkArchitectModal, UnlinkArchitectModal,
+CreateArchitectModal, EditArchitectModal, EditTicketModal,
+CreateProjectModal, EditProjectModal,
+CreateResearcherModal, EditResearcherModal, EditExperimentModal {
+    align: center middle;
+}
+
+#confirm-dialog, #prompt-dialog, #link-dialog, #unlink-dialog,
+#create-arch-dialog, #edit-arch-dialog, #edit-ticket-dialog,
+#create-project-dialog, #edit-project-dialog,
+#create-researcher-dialog, #edit-researcher-dialog, #edit-experiment-dialog {
+    width: 70;
+    max-height: 85%;
+    background: #faf9f6;
+    border: round #d4a800;
+    padding: 2 3;
+    overflow-y: auto;
+}
+
+#confirm-message, #prompt-title, #link-title, #unlink-title,
+#create-arch-title, #edit-arch-title, #edit-ticket-title,
+#create-project-title, #edit-project-title,
+#create-researcher-title, #edit-researcher-title, #edit-experiment-title {
+    color: #333333;
+    margin-bottom: 2;
+    text-align: center;
+}
+
+#confirm-buttons, #prompt-buttons, #link-buttons, #unlink-buttons,
+#create-arch-buttons, #edit-arch-buttons, #edit-ticket-buttons,
+#create-project-buttons, #edit-project-buttons,
+#create-researcher-buttons, #edit-researcher-buttons, #edit-experiment-buttons {
+    height: 3;
+    align: center middle;
+    margin-top: 2;
+}
+
+#confirm-buttons Button, #prompt-buttons Button,
+#link-buttons Button, #unlink-buttons Button,
+#create-arch-buttons Button, #edit-arch-buttons Button,
+#edit-ticket-buttons Button,
+#create-project-buttons Button, #edit-project-buttons Button,
+#create-researcher-buttons Button, #edit-researcher-buttons Button,
+#edit-experiment-buttons Button {
+    margin: 0 2;
+    min-width: 14;
+}
+
+#prompt-input {
+    height: 8;
+    border: round #d5d2cb;
+    margin: 1 0;
+}
+
+#link-select, #unlink-select {
+    width: 100%;
+    margin: 1 0;
+}
+
+/* ─── CRUD modal form fields ─────────────────────────────────────────────── */
+
+#create-arch-dialog Input,
+#edit-arch-dialog Input,
+#edit-ticket-dialog Input,
+#create-project-dialog Input,
+#edit-project-dialog Input,
+#create-researcher-dialog Input,
+#edit-researcher-dialog Input,
+#edit-experiment-dialog Input {
+    margin: 0 0 1 0;
+}
+
+#create-arch-dialog TextArea,
+#edit-arch-dialog TextArea,
+#edit-ticket-dialog TextArea,
+#create-project-dialog TextArea,
+#edit-project-dialog TextArea,
+#create-researcher-dialog TextArea,
+#edit-researcher-dialog TextArea,
+#edit-experiment-dialog TextArea {
+    height: 6;
+    border: round #d5d2cb;
+    margin: 0 0 1 0;
+}
+
+#create-arch-dialog Label,
+#edit-arch-dialog Label,
+#edit-ticket-dialog Label,
+#create-project-dialog Label,
+#edit-project-dialog Label,
+#create-researcher-dialog Label,
+#edit-researcher-dialog Label,
+#edit-experiment-dialog Label {
+    color: #666666;
+    margin: 1 0 0 0;
+}
+
+#edit-ticket-status-select, #edit-experiment-status-select {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+
+#add-repo-heading, #add-researcher-repo-heading {
+    margin-top: 1;
+}
+
+#add-repo-buttons, #add-researcher-repo-buttons {
+    height: 3;
+    align: left middle;
+    margin: 0 0 1 0;
+}
+
+#repo-list-display, #researcher-repo-list-display {
+    margin: 0 0 1 0;
+}
+
+#edit-arch-repos, #edit-researcher-repos {
+    margin: 1 0;
+}

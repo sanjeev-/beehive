@@ -16,6 +16,14 @@ When you have completed the task:
 These steps are MANDATORY. You must commit, push, and create a PR before finishing.
 """.strip()
 
+RESEARCH_DELIVERABLE_INSTRUCTIONS = """
+When you have completed the experiment:
+1. Save all results, logs, and artifacts to the working directory
+2. Create a RESULTS.md summarizing findings, metrics, and observations
+3. git add -A && git commit -m "<descriptive message>"
+Do NOT create a PR or push. Just commit your results locally.
+""".strip()
+
 
 class BeehiveConfig:
     """Manages Beehive configuration including global system prompts."""
@@ -95,6 +103,45 @@ class BeehiveConfig:
                 f"DELIVERABLE - Complete these steps when done:\n"
                 f"{'='*80}\n\n"
                 f"{deliverable}"
+            )
+
+        return "\n\n".join(parts) + "\n"
+
+    def combine_research_prompts(
+        self,
+        user_instructions: str,
+        include_deliverable: bool = False,
+    ) -> str:
+        """
+        Combine global system prompt with user instructions for research experiments.
+
+        Same as combine_prompts() but uses RESEARCH_DELIVERABLE_INSTRUCTIONS
+        (commit locally, no PR creation).
+        """
+        system_prompt = self.get_system_prompt()
+
+        parts = []
+        if system_prompt:
+            parts.append(
+                f"{'='*80}\n"
+                f"GLOBAL RULES - All agents must follow these rules:\n"
+                f"{'='*80}\n\n"
+                f"{system_prompt}"
+            )
+
+        parts.append(
+            f"{'='*80}\n"
+            f"TASK INSTRUCTIONS:\n"
+            f"{'='*80}\n\n"
+            f"{user_instructions}"
+        )
+
+        if include_deliverable:
+            parts.append(
+                f"{'='*80}\n"
+                f"DELIVERABLE - Complete these steps when done:\n"
+                f"{'='*80}\n\n"
+                f"{RESEARCH_DELIVERABLE_INSTRUCTIONS}"
             )
 
         return "\n\n".join(parts) + "\n"

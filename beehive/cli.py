@@ -15,6 +15,9 @@ from beehive.core.session import SessionManager, SessionStatus
 from beehive.core.tmux_manager import TmuxManager
 from beehive.core.config import BeehiveConfig
 from beehive.core.docker_manager import DockerManager
+from beehive.cli_architect import architect
+from beehive.cli_project import project, cto
+from beehive.cli_researcher import researcher
 
 console = Console()
 
@@ -588,6 +591,21 @@ def claude_md_set(ctx, content: str):
 
     config.set_claude_md(content)
     console.print(f"[green]✓[/green] CLAUDE.md template saved to {config.get_claude_md_path()}")
+
+
+cli.add_command(architect)
+cli.add_command(project)
+cli.add_command(cto)
+cli.add_command(researcher)
+
+
+@cli.command()
+@click.pass_context
+def ui(ctx):
+    """Launch the Beehive TUI dashboard."""
+    from beehive.tui.app import run_tui
+
+    run_tui(data_dir=ctx.obj["data_dir"])
 
 
 if __name__ == "__main__":
