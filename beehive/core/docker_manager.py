@@ -71,12 +71,7 @@ class DockerManager:
             f"-v {worktree_path}:/workspace",
         ]
 
-        # Mount prepared gitconfig (writable so gh/git can extend it)
-        gitconfig = worktree_path / ".beehive-gitconfig"
-        if gitconfig.exists():
-            parts.append(f"-v {gitconfig}:/home/node/.gitconfig")
-
-        # Conditionally mount other host configs (read-only)
+        # Conditionally mount host configs (read-only)
         optional_mounts = [
             (home / ".ssh", "/home/node/.ssh"),
             (home / ".config" / "gh", "/home/node/.config/gh"),
@@ -87,12 +82,14 @@ class DockerManager:
 
         # Single quotes prevent host-shell interpretation; the inner
         # bash expands $(cat ...) to read prompt files from /workspace.
-        # gh auth setup-git: configures git credential helper for HTTPS push
-        # url rewrite: converts SSH remote URLs to HTTPS (gh handles auth)
+        # Copy gitconfig from workspace (bind-mounted files can't be rewritten on macOS).
+        # gh auth setup-git: configures git credential helper for HTTPS push.
+        # url rewrite: converts SSH remote URLs to HTTPS (gh handles auth).
         inner = (
             "sudo /usr/local/bin/init-firewall.sh >/dev/null 2>&1;"
+            " cp /workspace/.beehive-gitconfig /home/node/.gitconfig 2>/dev/null || true;"
             " gh auth setup-git 2>/dev/null || true;"
-            ' git config --global url.https://github.com/.insteadOf git@github.com: 2>/dev/null || true;'
+            " git config --global url.https://github.com/.insteadOf git@github.com: 2>/dev/null || true;"
             f" {claude_cmd}"
         )
 
