@@ -60,7 +60,7 @@ class SendPromptModal(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="prompt-dialog"):
             yield Static(
-                f"[bold #333]Send prompt to {self._agent_name}[/]",
+                f"[bold #FFFFFF]Send prompt to {self._agent_name}[/]",
                 id="prompt-title",
             )
             yield TextArea(id="prompt-input")
@@ -101,7 +101,7 @@ class LinkArchitectModal(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="link-dialog"):
             yield Static(
-                f"[bold #333]Link architect to {self._project_name}[/]",
+                f"[bold #FFFFFF]Link architect to {self._project_name}[/]",
                 id="link-title",
             )
             yield Select(
@@ -144,7 +144,7 @@ class UnlinkArchitectModal(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="unlink-dialog"):
             yield Static(
-                f"[bold #333]Unlink architect from {self._project_name}[/]",
+                f"[bold #FFFFFF]Unlink architect from {self._project_name}[/]",
                 id="unlink-title",
             )
             yield Select(
@@ -184,12 +184,12 @@ class CreateArchitectModal(ModalScreen[dict | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="create-arch-dialog"):
-            yield Static("[bold #333]Create Architect[/]", id="create-arch-title")
+            yield Static("[bold #FFFFFF]Create Architect[/]", id="create-arch-title")
             yield Label("Name")
             yield Input(placeholder="Architect name", id="arch-name-input")
             yield Label("Principles")
             yield TextArea(id="arch-principles-input")
-            yield Static("[bold #555]Add Repo[/]", id="add-repo-heading")
+            yield Static("[bold #CCCCCC]Add Repo[/]", id="add-repo-heading")
             yield Label("Repo Name")
             yield Input(placeholder="e.g. my-service", id="repo-name-input")
             yield Label("Repo Path")
@@ -208,9 +208,9 @@ class CreateArchitectModal(ModalScreen[dict | None]):
 
     def _update_repo_list(self) -> None:
         if self._repos:
-            lines = [f"  [#555]{r['name']}[/] — {r['path']} ({r['base_branch']})" for r in self._repos]
+            lines = [f"  [#CCCCCC]{r['name']}[/] — {r['path']} ({r['base_branch']})" for r in self._repos]
             self.query_one("#repo-list-display", Static).update(
-                "[#888]Repos:[/]\n" + "\n".join(lines)
+                "[#777777]Repos:[/]\n" + "\n".join(lines)
             )
         else:
             self.query_one("#repo-list-display", Static).update("")
@@ -257,16 +257,16 @@ class EditArchitectModal(ModalScreen[dict | None]):
     def compose(self) -> ComposeResult:
         a = self._architect
         with Vertical(id="edit-arch-dialog"):
-            yield Static("[bold #333]Edit Architect[/]", id="edit-arch-title")
+            yield Static("[bold #FFFFFF]Edit Architect[/]", id="edit-arch-title")
             yield Label("Name")
             yield Input(value=a.name, id="edit-arch-name-input")
             yield Label("Principles")
             yield TextArea(a.principles, id="edit-arch-principles-input")
             if a.repos:
                 repo_lines = "\n".join(
-                    f"  [#555]{r.name}[/] — {r.path} ({r.base_branch})" for r in a.repos
+                    f"  [#CCCCCC]{r.name}[/] — {r.path} ({r.base_branch})" for r in a.repos
                 )
-                yield Static(f"[#888]Repos (read-only):[/]\n{repo_lines}", id="edit-arch-repos")
+                yield Static(f"[#777777]Repos (read-only):[/]\n{repo_lines}", id="edit-arch-repos")
             with Horizontal(id="edit-arch-buttons"):
                 yield Button("Save", variant="warning", id="edit-arch-save")
                 yield Button("Cancel", variant="default", id="edit-arch-cancel")
@@ -307,7 +307,7 @@ class EditTicketModal(ModalScreen[dict | None]):
         t = self._ticket
         status_choices = [(s.value, s.value) for s in TicketStatus]
         with Vertical(id="edit-ticket-dialog"):
-            yield Static("[bold #333]Edit Ticket[/]", id="edit-ticket-title")
+            yield Static("[bold #FFFFFF]Edit Ticket[/]", id="edit-ticket-title")
             yield Label("Title")
             yield Input(value=t.title, id="edit-ticket-title-input")
             yield Label("Description")
@@ -354,7 +354,7 @@ class CreateProjectModal(ModalScreen[dict | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="create-project-dialog"):
-            yield Static("[bold #333]Create Project[/]", id="create-project-title")
+            yield Static("[bold #FFFFFF]Create Project[/]", id="create-project-title")
             yield Label("Name")
             yield Input(placeholder="Project name", id="project-name-input")
             yield Label("Description")
@@ -409,7 +409,7 @@ class EditProjectModal(ModalScreen[dict | None]):
     def compose(self) -> ComposeResult:
         p = self._project
         with Vertical(id="edit-project-dialog"):
-            yield Static("[bold #333]Edit Project[/]", id="edit-project-title")
+            yield Static("[bold #FFFFFF]Edit Project[/]", id="edit-project-title")
             yield Label("Name")
             yield Input(value=p.name, id="edit-project-name-input")
             yield Label("Description")
@@ -463,12 +463,12 @@ class CreateResearcherModal(ModalScreen[dict | None]):
 
     def compose(self) -> ComposeResult:
         with Vertical(id="create-researcher-dialog"):
-            yield Static("[bold #333]Create Researcher[/]", id="create-researcher-title")
+            yield Static("[bold #FFFFFF]Create Researcher[/]", id="create-researcher-title")
             yield Label("Name")
             yield Input(placeholder="Researcher name", id="researcher-name-input")
             yield Label("Principles")
             yield TextArea(id="researcher-principles-input")
-            yield Static("[bold #555]Add Repo[/]", id="add-researcher-repo-heading")
+            yield Static("[bold #CCCCCC]Add Repo[/]", id="add-researcher-repo-heading")
             yield Label("Repo Name")
             yield Input(placeholder="e.g. ml-experiments", id="researcher-repo-name-input")
             yield Label("Repo Path")
@@ -487,9 +487,9 @@ class CreateResearcherModal(ModalScreen[dict | None]):
 
     def _update_repo_list(self) -> None:
         if self._repos:
-            lines = [f"  [#555]{r['name']}[/] \u2014 {r['path']} ({r['base_branch']})" for r in self._repos]
+            lines = [f"  [#CCCCCC]{r['name']}[/] \u2014 {r['path']} ({r['base_branch']})" for r in self._repos]
             self.query_one("#researcher-repo-list-display", Static).update(
-                "[#888]Repos:[/]\n" + "\n".join(lines)
+                "[#777777]Repos:[/]\n" + "\n".join(lines)
             )
         else:
             self.query_one("#researcher-repo-list-display", Static).update("")
@@ -536,16 +536,16 @@ class EditResearcherModal(ModalScreen[dict | None]):
     def compose(self) -> ComposeResult:
         r = self._researcher
         with Vertical(id="edit-researcher-dialog"):
-            yield Static("[bold #333]Edit Researcher[/]", id="edit-researcher-title")
+            yield Static("[bold #FFFFFF]Edit Researcher[/]", id="edit-researcher-title")
             yield Label("Name")
             yield Input(value=r.name, id="edit-researcher-name-input")
             yield Label("Principles")
             yield TextArea(r.principles, id="edit-researcher-principles-input")
             if r.repos:
                 repo_lines = "\n".join(
-                    f"  [#555]{repo.name}[/] \u2014 {repo.path} ({repo.base_branch})" for repo in r.repos
+                    f"  [#CCCCCC]{repo.name}[/] \u2014 {repo.path} ({repo.base_branch})" for repo in r.repos
                 )
-                yield Static(f"[#888]Repos (read-only):[/]\n{repo_lines}", id="edit-researcher-repos")
+                yield Static(f"[#777777]Repos (read-only):[/]\n{repo_lines}", id="edit-researcher-repos")
             with Horizontal(id="edit-researcher-buttons"):
                 yield Button("Save", variant="warning", id="edit-researcher-save")
                 yield Button("Cancel", variant="default", id="edit-researcher-cancel")
@@ -586,7 +586,7 @@ class EditExperimentModal(ModalScreen[dict | None]):
         e = self._experiment
         status_choices = [(s.value, s.value) for s in ExperimentStatus]
         with Vertical(id="edit-experiment-dialog"):
-            yield Static("[bold #333]Edit Experiment[/]", id="edit-experiment-title")
+            yield Static("[bold #FFFFFF]Edit Experiment[/]", id="edit-experiment-title")
             yield Label("Title")
             yield Input(value=e.title, id="edit-experiment-title-input")
             yield Label("Description")

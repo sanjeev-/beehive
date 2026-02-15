@@ -1,8 +1,10 @@
 """Beehive TUI Application — terminal dashboard."""
 
+import subprocess
 import shutil
 from pathlib import Path
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
@@ -74,7 +76,7 @@ class BeehiveHeader(Static):
     """Top bar — dark strip with bee-yellow logo."""
 
     def render(self):
-        return "  [bold #FFD700]bh[/] \U0001f41d"
+        return "  [bold #FEE100]bh[/] \U0001f41d"
 
 
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
@@ -100,6 +102,8 @@ class NavItem(Static):
 class Sidebar(Vertical):
     """Left navigation column."""
 
+    can_focus = True
+
     active_view: reactive[str] = reactive("home")
 
     def compose(self) -> ComposeResult:
@@ -119,6 +123,28 @@ class Sidebar(Vertical):
                 self.app.set_view(child.nav_key)
                 break
 
+    def on_key(self, event: events.Key) -> None:
+        items = list(NAV_ITEMS)
+        current_idx = next(
+            (i for i, (k, _) in enumerate(items) if k == self.active_view), 0
+        )
+        if event.key == "down":
+            new_idx = min(current_idx + 1, len(items) - 1)
+            self.active_view = items[new_idx][0]
+            self.app.set_view(items[new_idx][0])
+            event.prevent_default()
+            event.stop()
+        elif event.key == "up":
+            new_idx = max(current_idx - 1, 0)
+            self.active_view = items[new_idx][0]
+            self.app.set_view(items[new_idx][0])
+            event.prevent_default()
+            event.stop()
+        elif event.key in ("right", "enter"):
+            self.app._focus_table()
+            event.prevent_default()
+            event.stop()
+
 
 # ─── Home view ────────────────────────────────────────────────────────────────
 
@@ -133,7 +159,7 @@ class SummaryCard(Static):
         self.card_id = card_id
 
     def render(self):
-        return f"[bold #333333]{self.card_value}[/]\n[#999999]{self.card_title}[/]"
+        return f"[bold #FFFFFF]{self.card_value}[/]\n[#888888]{self.card_title}[/]"
 
     def update_value(self, value: str):
         self.card_value = value
@@ -210,17 +236,17 @@ class HomeView(Container):
         active_previews = len(store.preview_mgr.list_previews())
 
         stats_text = (
-            f"[#999]Sessions today[/]    [bold #333]{today_sessions}[/]\n"
-            f"[#999]Completed[/]         [#5a8a5a]{completed}[/]\n"
-            f"[#999]Failed[/]            [#b84040]{failed}[/]\n"
-            f"[#999]Stopped[/]           [#999]{stopped}[/]\n"
-            f"[#999]Success rate[/]      [bold #333]{success_rate}[/]\n"
+            f"[#888888]Sessions today[/]    [bold #FFFFFF]{today_sessions}[/]\n"
+            f"[#888888]Completed[/]         [#5a8a5a]{completed}[/]\n"
+            f"[#888888]Failed[/]            [#b84040]{failed}[/]\n"
+            f"[#888888]Stopped[/]           [#888888]{stopped}[/]\n"
+            f"[#888888]Success rate[/]      [bold #FFFFFF]{success_rate}[/]\n"
             f"\n"
-            f"[#999]Total tickets[/]     [bold #333]{total_tickets}[/]\n"
-            f"[#999]Tickets done[/]      [#5a8a5a]{completed_tickets}[/]\n"
-            f"[#999]Experiments[/]       [bold #333]{total_experiments}[/]\n"
-            f"[#999]Experiments done[/]  [#5a8a5a]{completed_experiments}[/]\n"
-            f"[#999]Active previews[/]   [bold #333]{active_previews}[/]"
+            f"[#888888]Total tickets[/]     [bold #FFFFFF]{total_tickets}[/]\n"
+            f"[#888888]Tickets done[/]      [#5a8a5a]{completed_tickets}[/]\n"
+            f"[#888888]Experiments[/]       [bold #FFFFFF]{total_experiments}[/]\n"
+            f"[#888888]Experiments done[/]  [#5a8a5a]{completed_experiments}[/]\n"
+            f"[#888888]Active previews[/]   [bold #FFFFFF]{active_previews}[/]"
         )
         self.query_one("#stats-content", Static).update(stats_text)
 
@@ -228,18 +254,18 @@ class HomeView(Container):
         activities = []
         for s in sessions:
             verb = {
-                "running": "[#c49b00]started[/]",
+                "running": "[#FEE100]started[/]",
                 "completed": "[#5a8a5a]completed[/]",
                 "failed": "[#b84040]failed[/]",
-                "stopped": "[#999]stopped[/]",
+                "stopped": "[#888888]stopped[/]",
             }.get(s.status, s.status)
             ts = s.created_at.strftime("%m/%d %H:%M")
             activities.append(
-                (s.created_at, f"[#888]{ts}[/]  [#444]{s.name}[/] {verb}")
+                (s.created_at, f"[#777777]{ts}[/]  [#CCCCCC]{s.name}[/] {verb}")
             )
             if s.pr_url:
                 activities.append(
-                    (s.created_at, f"[#888]{ts}[/]  [#555]PR opened[/] [#666]{s.pr_url}[/]")
+                    (s.created_at, f"[#777777]{ts}[/]  [#CCCCCC]PR opened[/] [#888888]{s.pr_url}[/]")
                 )
 
         for a in architects:
@@ -248,8 +274,8 @@ class HomeView(Container):
                 activities.append(
                     (
                         p.created_at,
-                        f"[#888]{ts}[/]  Plan [#444]{p.plan_id[:8]}[/] "
-                        f'[#444]"{p.directive[:40]}"[/]',
+                        f"[#777777]{ts}[/]  Plan [#CCCCCC]{p.plan_id[:8]}[/] "
+                        f'[#CCCCCC]"{p.directive[:40]}"[/]',
                     )
                 )
                 for t in p.tickets:
@@ -258,8 +284,8 @@ class HomeView(Container):
                         activities.append(
                             (
                                 t.updated_at,
-                                f"[#888]{ts2}[/]  [#444]{t.title[:30]}[/] "
-                                f"\u2192 [#666]{t.session_id}[/]",
+                                f"[#777777]{ts2}[/]  [#CCCCCC]{t.title[:30]}[/] "
+                                f"\u2192 [#888888]{t.session_id}[/]",
                             )
                         )
 
@@ -269,8 +295,8 @@ class HomeView(Container):
                 activities.append(
                     (
                         s.created_at,
-                        f"[#888]{ts}[/]  Study [#444]{s.study_id[:8]}[/] "
-                        f'[#444]"{s.directive[:40]}"[/]',
+                        f"[#777777]{ts}[/]  Study [#CCCCCC]{s.study_id[:8]}[/] "
+                        f'[#CCCCCC]"{s.directive[:40]}"[/]',
                     )
                 )
                 for e in s.experiments:
@@ -279,15 +305,15 @@ class HomeView(Container):
                         activities.append(
                             (
                                 e.updated_at,
-                                f"[#888]{ts2}[/]  [#444]{e.title[:30]}[/] "
-                                f"\u2192 [#666]{e.session_id}[/]",
+                                f"[#777777]{ts2}[/]  [#CCCCCC]{e.title[:30]}[/] "
+                                f"\u2192 [#888888]{e.session_id}[/]",
                             )
                         )
 
         activities.sort(key=lambda x: x[0], reverse=True)
         feed_lines = [line for _, line in activities[:20]]
         if not feed_lines:
-            feed_lines = ["[#bbb]No activity yet.[/]"]
+            feed_lines = ["[#666666]No activity yet.[/]"]
         self.query_one("#activity-content", Static).update("\n".join(feed_lines))
 
 
@@ -344,7 +370,7 @@ class ProjectsView(Container):
                 )
             if not self._projects:
                 self.query_one("#project-detail-content", Static).update(
-                    "[#bbb]No projects found.[/]"
+                    "[#666666]No projects found.[/]"
                 )
         finally:
             self._loading = False
@@ -363,48 +389,48 @@ class ProjectsView(Container):
         p = self._projects[idx]
 
         lines = [
-            f"[bold #333]{p.name}[/]",
+            f"[bold #FFFFFF]{p.name}[/]",
             "",
-            f"[#999]Id[/]           {p.project_id}",
-            f"[#999]Created[/]      {p.created_at.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"[#888888]Id[/]           {p.project_id}",
+            f"[#888888]Created[/]      {p.created_at.strftime('%Y-%m-%d %H:%M:%S')}",
         ]
 
         if p.description:
-            lines.append(f"[#999]Description[/]  {p.description[:120]}")
+            lines.append(f"[#888888]Description[/]  {p.description[:120]}")
 
         if p.design_principles:
             lines.append("")
-            lines.append("[#888]Design principles[/]")
+            lines.append("[#777777]Design principles[/]")
             for line in p.design_principles.strip().split("\n")[:6]:
-                lines.append(f"  [#777]{line}[/]")
+                lines.append(f"  [#999999]{line}[/]")
 
         if p.engineering_principles:
             lines.append("")
-            lines.append("[#888]Engineering principles[/]")
+            lines.append("[#777777]Engineering principles[/]")
             for line in p.engineering_principles.strip().split("\n")[:6]:
-                lines.append(f"  [#777]{line}[/]")
+                lines.append(f"  [#999999]{line}[/]")
 
         if p.repos:
             lines.append("")
-            lines.append("[#888]Repos[/]")
+            lines.append("[#777777]Repos[/]")
             for r in p.repos:
                 desc = f" — {r.description}" if r.description else ""
-                lines.append(f"  [#555]{r.name}[/]  {r.path}{desc}")
+                lines.append(f"  [#CCCCCC]{r.name}[/]  {r.path}{desc}")
 
         if p.preview:
             lines.append("")
-            lines.append("[#888]Preview config[/]")
-            lines.append(f"  [#777]Command: {p.preview.setup_command}[/]")
-            lines.append(f"  [#777]URL: {p.preview.url_template}[/]")
+            lines.append("[#777777]Preview config[/]")
+            lines.append(f"  [#999999]Command: {p.preview.setup_command}[/]")
+            lines.append(f"  [#999999]URL: {p.preview.url_template}[/]")
             if p.preview.teardown_command:
-                lines.append(f"  [#777]Teardown: {p.preview.teardown_command}[/]")
-            lines.append(f"  [#777]Timeout: {p.preview.startup_timeout}s[/]")
+                lines.append(f"  [#999999]Teardown: {p.preview.teardown_command}[/]")
+            lines.append(f"  [#999999]Timeout: {p.preview.startup_timeout}s[/]")
 
         if p.architect_ids:
             lines.append("")
-            lines.append("[#888]Linked architects[/]")
+            lines.append("[#777777]Linked architects[/]")
             for arch_id in p.architect_ids:
-                lines.append(f"  [#555]{arch_id}[/]")
+                lines.append(f"  [#CCCCCC]{arch_id}[/]")
 
         self.query_one("#project-detail-content", Static).update("\n".join(lines))
 
@@ -554,6 +580,7 @@ class ArchitectsView(Container):
         Binding("c", "create_architect", "Create", show=True),
         Binding("e", "edit_item", "Edit", show=True),
         Binding("d", "delete_architect", "Delete", show=True),
+        Binding("a", "assign_next", "Assign next", show=True),
     ]
 
     depth: reactive[int] = reactive(0)  # 0=list, 1=plans, 2=tickets
@@ -617,7 +644,7 @@ class ArchitectsView(Container):
             return
         a = self._selected_arch
         self.query_one("#arch-breadcrumb", Label).update(
-            f"Architects  \u203a  [bold #333]{a.name}[/]  \u203a  Plans"
+            f"Architects  \u203a  [bold #FFFFFF]{a.name}[/]  \u203a  Plans"
         )
         table = self.query_one("#arch-table", DataTable)
         self._set_columns(table, "plans", ("Id", "Directive", "Tickets", "Pending", "Done", "Failed"))
@@ -632,10 +659,10 @@ class ArchitectsView(Container):
             )
 
         detail = (
-            f"[bold #333]{a.name}[/]\n\n"
-            f"[#999]Id[/]          {a.architect_id}\n"
-            f"[#999]Repos[/]       {', '.join(r.name for r in a.repos)}\n\n"
-            f"[#888]Principles[/]\n[#777]{a.principles[:200]}[/]"
+            f"[bold #FFFFFF]{a.name}[/]\n\n"
+            f"[#888888]Id[/]          {a.architect_id}\n"
+            f"[#888888]Repos[/]       {', '.join(r.name for r in a.repos)}\n\n"
+            f"[#777777]Principles[/]\n[#999999]{a.principles[:200]}[/]"
         )
         self.query_one("#arch-detail-content", Static).update(detail)
 
@@ -645,16 +672,16 @@ class ArchitectsView(Container):
         p = self._selected_plan
         a = self._selected_arch
         self.query_one("#arch-breadcrumb", Label).update(
-            f"Architects  \u203a  [bold #333]{a.name}[/]  \u203a  Plans  \u203a  [bold #333]{p.plan_id[:8]}[/]"
+            f"Architects  \u203a  [bold #FFFFFF]{a.name}[/]  \u203a  Plans  \u203a  [bold #FFFFFF]{p.plan_id[:8]}[/]"
         )
         table = self.query_one("#arch-table", DataTable)
         self._set_columns(table, "tickets", ("#", "Id", "Title", "Repo", "Status", "Branch", "Session", "PR"))
         self._sorted_tickets = sorted(p.tickets, key=lambda t: t.order)
         for t in self._sorted_tickets:
             status_display = {
-                "pending": "[#c49b00]pending[/]",
+                "pending": "[#FEE100]pending[/]",
                 "assigned": "[#5577bb]assigned[/]",
-                "in_progress": "[#c49b00]in progress[/]",
+                "in_progress": "[#FEE100]in progress[/]",
                 "completed": "[#5a8a5a]completed[/]",
                 "failed": "[#b84040]failed[/]",
                 "merged": "[#55bbbb]merged[/]",
@@ -669,11 +696,37 @@ class ArchitectsView(Container):
             )
 
         detail = (
-            f"[bold #333]Plan {p.plan_id[:8]}[/]\n\n"
-            f'[#999]Directive[/]    {p.directive[:120]}\n'
-            f"[#999]Created[/]      {p.created_at.strftime('%Y-%m-%d %H:%M')}"
+            f"[bold #FFFFFF]Plan {p.plan_id[:8]}[/]\n\n"
+            f'[#888888]Directive[/]    {p.directive[:120]}\n'
+            f"[#888888]Created[/]      {p.created_at.strftime('%Y-%m-%d %H:%M')}"
         )
+        if self._can_assign_next():
+            detail += "\n\n[#FEE100]Ready to assign next ticket (a)[/]"
         self.query_one("#arch-detail-content", Static).update(detail)
+
+    def _can_assign_next(self) -> bool:
+        """Check if the next ticket can be assigned."""
+        if self.depth != 2 or not self._selected_plan or not self._selected_arch:
+            return False
+        p = self._selected_plan
+        if p.execution_mode != "sequential":
+            return False
+        in_flight = {"assigned", "in_progress"}
+        has_in_flight = any(str(t.status) in in_flight for t in p.tickets)
+        if has_in_flight:
+            return False
+        has_pending = any(str(t.status) in ("pending",) for t in p.tickets)
+        return has_pending
+
+    def action_assign_next(self) -> None:
+        """Assign the next pending ticket via CLI subprocess."""
+        if not self._can_assign_next():
+            self.app.notify("Cannot assign next ticket now", severity="warning")
+            return
+        arch_id = self._selected_arch.architect_id
+        subprocess.Popen(["beehive", "architect", "assign", arch_id])
+        self.app.notify("Assigning next ticket...")
+        self.set_timer(3, self.app._do_refresh)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if self._loading:
@@ -901,7 +954,7 @@ class ResearchersView(Container):
             return
         r = self._selected_researcher
         self.query_one("#researcher-breadcrumb", Label).update(
-            f"Researchers  \u203a  [bold #333]{r.name}[/]  \u203a  Studies"
+            f"Researchers  \u203a  [bold #FFFFFF]{r.name}[/]  \u203a  Studies"
         )
         table = self.query_one("#researcher-table", DataTable)
         self._set_columns(table, "studies", ("Id", "Directive", "Experiments", "Pending", "Done", "Failed"))
@@ -916,10 +969,10 @@ class ResearchersView(Container):
             )
 
         detail = (
-            f"[bold #333]{r.name}[/]\n\n"
-            f"[#999]Id[/]          {r.researcher_id}\n"
-            f"[#999]Repos[/]       {', '.join(repo.name for repo in r.repos)}\n\n"
-            f"[#888]Principles[/]\n[#777]{r.principles[:200]}[/]"
+            f"[bold #FFFFFF]{r.name}[/]\n\n"
+            f"[#888888]Id[/]          {r.researcher_id}\n"
+            f"[#888888]Repos[/]       {', '.join(repo.name for repo in r.repos)}\n\n"
+            f"[#777777]Principles[/]\n[#999999]{r.principles[:200]}[/]"
         )
         self.query_one("#researcher-detail-content", Static).update(detail)
 
@@ -929,15 +982,15 @@ class ResearchersView(Container):
         s = self._selected_study
         r = self._selected_researcher
         self.query_one("#researcher-breadcrumb", Label).update(
-            f"Researchers  \u203a  [bold #333]{r.name}[/]  \u203a  Studies  \u203a  [bold #333]{s.study_id[:8]}[/]"
+            f"Researchers  \u203a  [bold #FFFFFF]{r.name}[/]  \u203a  Studies  \u203a  [bold #FFFFFF]{s.study_id[:8]}[/]"
         )
         table = self.query_one("#researcher-table", DataTable)
         self._set_columns(table, "experiments", ("Id", "Title", "Repo", "Status", "Session", "Output"))
         for e in s.experiments:
             status_display = {
-                "pending": "[#c49b00]pending[/]",
+                "pending": "[#FEE100]pending[/]",
                 "assigned": "[#5577bb]assigned[/]",
-                "in_progress": "[#c49b00]in progress[/]",
+                "in_progress": "[#FEE100]in progress[/]",
                 "completed": "[#5a8a5a]completed[/]",
                 "failed": "[#b84040]failed[/]",
             }.get(str(e.status), str(e.status))
@@ -950,9 +1003,9 @@ class ResearchersView(Container):
             )
 
         detail = (
-            f"[bold #333]Study {s.study_id[:8]}[/]\n\n"
-            f'[#999]Directive[/]    {s.directive[:120]}\n'
-            f"[#999]Created[/]      {s.created_at.strftime('%Y-%m-%d %H:%M')}"
+            f"[bold #FFFFFF]Study {s.study_id[:8]}[/]\n\n"
+            f'[#888888]Directive[/]    {s.directive[:120]}\n'
+            f"[#888888]Created[/]      {s.created_at.strftime('%Y-%m-%d %H:%M')}"
         )
         self.query_one("#researcher-detail-content", Static).update(detail)
 
@@ -1170,12 +1223,12 @@ class AgentsView(Container):
                 table.clear()
             for s in self._sessions:
                 status_display = {
-                    "running": "[#c49b00]running[/]",
+                    "running": "[#FEE100]running[/]",
                     "completed": "[#5a8a5a]completed[/]",
                     "failed": "[#b84040]failed[/]",
-                    "stopped": "[#999]stopped[/]",
+                    "stopped": "[#888888]stopped[/]",
                 }.get(s.status, s.status)
-                runtime = "[#8a6dbf]docker[/]" if s.runtime == "docker" else "[#999]host[/]"
+                runtime = "[#8a6dbf]docker[/]" if s.runtime == "docker" else "[#888888]host[/]"
                 branch = s.branch_name
                 if len(branch) > 30:
                     branch = branch[:27] + "..."
@@ -1189,7 +1242,7 @@ class AgentsView(Container):
                 )
             if not self._sessions:
                 self.query_one("#agent-detail-content", Static).update(
-                    "[#bbb]No agent sessions found.[/]"
+                    "[#666666]No agent sessions found.[/]"
                 )
         finally:
             self._loading = False
@@ -1207,40 +1260,40 @@ class AgentsView(Container):
             return
         s = self._sessions[idx]
         status_color = {
-            "running": "#c49b00",
+            "running": "#FEE100",
             "completed": "#5a8a5a",
             "failed": "#b84040",
-            "stopped": "#999",
-        }.get(s.status, "#555")
+            "stopped": "#888888",
+        }.get(s.status, "#CCCCCC")
 
         lines = [
-            f"[bold #333]{s.name}[/]",
+            f"[bold #FFFFFF]{s.name}[/]",
             "",
-            f"[#999]Id[/]          {s.session_id}",
-            f"[#999]Status[/]      [{status_color}]{s.status}[/{status_color}]",
-            f"[#999]Runtime[/]     {s.runtime}",
-            f"[#999]Branch[/]      {s.branch_name}",
-            f"[#999]Repo[/]        {s.original_repo}",
-            f"[#999]Worktree[/]    {s.working_directory}",
-            f"[#999]Created[/]     {s.created_at.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"[#888888]Id[/]          {s.session_id}",
+            f"[#888888]Status[/]      [{status_color}]{s.status}[/{status_color}]",
+            f"[#888888]Runtime[/]     {s.runtime}",
+            f"[#888888]Branch[/]      {s.branch_name}",
+            f"[#888888]Repo[/]        {s.original_repo}",
+            f"[#888888]Worktree[/]    {s.working_directory}",
+            f"[#888888]Created[/]     {s.created_at.strftime('%Y-%m-%d %H:%M:%S')}",
         ]
 
         if s.completed_at:
             lines.append(
-                f"[#999]Completed[/]   {s.completed_at.strftime('%Y-%m-%d %H:%M:%S')}"
+                f"[#888888]Completed[/]   {s.completed_at.strftime('%Y-%m-%d %H:%M:%S')}"
             )
         if s.pr_url:
-            lines.append(f"[#999]PR[/]         [#555]{s.pr_url}[/]")
+            lines.append(f"[#888888]PR[/]         [#CCCCCC]{s.pr_url}[/]")
         if s.preview_url:
-            lines.append(f"[#999]Preview[/]    [#555]{s.preview_url}[/]")
+            lines.append(f"[#888888]Preview[/]    [#CCCCCC]{s.preview_url}[/]")
 
         instr = s.instructions[:150].replace("\n", " ")
-        lines.append(f"\n[#999]Task[/]  {instr}...")
+        lines.append(f"\n[#888888]Task[/]  {instr}...")
 
         log_path = Path(s.log_file)
         if log_path.exists():
             lines.append("")
-            lines.append("[#888]Recent log[/]")
+            lines.append("[#777777]Recent log[/]")
             try:
                 size = log_path.stat().st_size
                 read_bytes = min(size, 2048)
@@ -1251,9 +1304,9 @@ class AgentsView(Container):
                 tail = raw.strip().split("\n")[-8:]
                 for log_line in tail:
                     clean = log_line[:80].replace("[", "\\[")
-                    lines.append(f"  [#aaa]{clean}[/]")
+                    lines.append(f"  [#777777]{clean}[/]")
             except Exception:
-                lines.append("  [#bbb]Could not read log.[/]")
+                lines.append("  [#666666]Could not read log.[/]")
 
         self.query_one("#agent-detail-content", Static).update("\n".join(lines))
 
@@ -1372,8 +1425,7 @@ class BeehiveApp(App):
         Binding("3", "switch_view('architects')", "Architects", show=True),
         Binding("4", "switch_view('researchers')", "Researchers", show=True),
         Binding("5", "switch_view('agents')", "Agents", show=True),
-        Binding("left", "prev_view", "\u2190 Prev", show=True, priority=True),
-        Binding("right", "next_view", "\u2192 Next", show=True, priority=True),
+        Binding("left", "focus_sidebar", "\u2190 Sidebar", show=True, priority=True),
         Binding("escape", "go_back", "Back", show=True),
         Binding("r", "force_refresh", "Refresh", show=True),
         Binding("q", "quit", "Quit", show=True),
@@ -1405,6 +1457,7 @@ class BeehiveApp(App):
         self.set_view("home")
         self._do_refresh()
         self._refresh_timer = self.set_interval(8, self._do_refresh)
+        self.query_one("#sidebar", Sidebar).focus()
 
     def set_view(self, view_name: str) -> None:
         self.current_view = view_name
@@ -1414,7 +1467,6 @@ class BeehiveApp(App):
             widget.set_class(name == view_name, "visible")
             widget.set_class(name != view_name, "hidden")
         self._do_refresh()
-        self._focus_table()
 
     def _focus_table(self) -> None:
         """Focus the DataTable in the current view."""
@@ -1433,15 +1485,8 @@ class BeehiveApp(App):
     def action_switch_view(self, view_name: str) -> None:
         self.set_view(view_name)
 
-    def action_next_view(self) -> None:
-        idx = self.VIEW_ORDER.index(self.current_view)
-        next_idx = (idx + 1) % len(self.VIEW_ORDER)
-        self.set_view(self.VIEW_ORDER[next_idx])
-
-    def action_prev_view(self) -> None:
-        idx = self.VIEW_ORDER.index(self.current_view)
-        prev_idx = (idx - 1) % len(self.VIEW_ORDER)
-        self.set_view(self.VIEW_ORDER[prev_idx])
+    def action_focus_sidebar(self) -> None:
+        self.query_one("#sidebar", Sidebar).focus()
 
     def action_go_back(self) -> None:
         if self.current_view == "architects":

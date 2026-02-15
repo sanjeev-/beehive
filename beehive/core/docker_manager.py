@@ -1,5 +1,7 @@
 """Docker container management for isolated agent execution."""
 
+from __future__ import annotations
+
 import subprocess
 from pathlib import Path
 
@@ -68,6 +70,7 @@ class DockerManager:
             f"--name beehive-{session_id}",
             "--cap-add=NET_ADMIN",
             "-e ANTHROPIC_API_KEY",
+            "-e GH_TOKEN",
             f"-v {worktree_path}:/workspace",
         ]
 
@@ -100,7 +103,13 @@ class DockerManager:
             f"'{inner}'",
         ])
 
-        return " ".join(parts)
+        docker_cmd = " ".join(parts)
+
+        # Resolve GH_TOKEN at launch time so gh CLI works inside the
+        # container.  On macOS the token lives in the system keychain,
+        # which isn't accessible from Linux containers.  The export runs
+        # on the host (inside the tmux session) before docker starts.
+        return f"export GH_TOKEN=$(gh auth token 2>/dev/null); {docker_cmd}"
 
     def stop_container(self, session_id: str) -> bool:
         """Stop a running container. Returns True if stopped successfully."""
