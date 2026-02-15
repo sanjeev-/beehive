@@ -44,6 +44,9 @@ class TmuxManager:
         elif auto_approve:
             cmd += ' "Execute the instructions in the system prompt."'
 
+        # Write completion marker when claude exits (regardless of exit code)
+        cmd += f"; touch {prompt_dir}/.beehive-done"
+
         return cmd
 
     def create_session(

@@ -80,6 +80,9 @@ class DataStore:
 
     def sync_architect_tickets(self) -> None:
         """Sync ticket statuses from sessions and GitHub. Persists changes."""
+        # Auto-complete sessions whose agent process has finished
+        self.session_mgr.auto_complete_sessions()
+
         architects = self.architect_storage.load_all_architects()
         for arch in architects:
             repo_paths = {r.name: r.path for r in arch.repos}

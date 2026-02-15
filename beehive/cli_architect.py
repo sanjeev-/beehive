@@ -505,6 +505,23 @@ def plan_status(ctx, architect_id: str, plan_id: Optional[str]):
     _print_tickets_table(plan.tickets)
 
 
+def _find_pr_for_branch(branch_name: str, repo_path: str):
+    """Find a PR URL for a given branch via gh CLI."""
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "list", "--head", branch_name, "--json", "url", "--limit", "1"],
+            capture_output=True, text=True, timeout=15,
+            cwd=repo_path,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            if data:
+                return data[0].get("url")
+    except Exception:
+        pass
+    return None
+
+
 def _check_pr_merged(pr_url: str) -> bool:
     """Check if a GitHub PR is merged via `gh pr view`."""
     try:
@@ -588,8 +605,28 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
 
     try:
         while True:
+            # 0. Auto-complete sessions whose agent process has finished
+            session_mgr.auto_complete_sessions()
+
             # 1. Sync session status → ticket status
             synced = _sync_tickets_from_sessions(plan, session_mgr)
+
+            # 1b. Discover PR URLs for completed tickets missing them
+            repo_paths = {r.name: r.path for r in arch.repos}
+            for ticket in plan.tickets:
+                if ticket.branch_name and not ticket.pr_url and ticket.status not in (
+                    TicketStatus.PENDING, TicketStatus.FAILED
+                ):
+                    repo_path = repo_paths.get(ticket.repo)
+                    if repo_path:
+                        pr_url = _find_pr_for_branch(ticket.branch_name, repo_path)
+                        if pr_url:
+                            ticket.pr_url = pr_url
+                            ticket.updated_at = datetime.utcnow()
+                            synced = True
+                            console.print(
+                                f"[dim]Discovered PR for {ticket.title}: {pr_url}[/dim]"
+                            )
 
             # 2. Check for merged PRs
             for ticket in plan.tickets:
