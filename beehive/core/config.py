@@ -59,6 +59,7 @@ class BeehiveConfig:
         user_instructions: str,
         base_branch: str = "main",
         include_deliverable: bool = False,
+        plan_context: Optional[str] = None,
     ) -> str:
         """
         Combine global system prompt with user instructions.
@@ -67,6 +68,10 @@ class BeehiveConfig:
         ---
         [GLOBAL RULES - All agents must follow these]
         <system prompt content>
+
+        ---
+        [PLAN CONTEXT] (optional - for ordered plans)
+        <previous/future ticket summaries>
 
         ---
         [TASK INSTRUCTIONS]
@@ -85,6 +90,14 @@ class BeehiveConfig:
                 f"GLOBAL RULES - All agents must follow these rules:\n"
                 f"{'='*80}\n\n"
                 f"{system_prompt}"
+            )
+
+        if plan_context:
+            parts.append(
+                f"{'='*80}\n"
+                f"PLAN CONTEXT - Your task is part of an ordered plan:\n"
+                f"{'='*80}\n\n"
+                f"{plan_context}"
             )
 
         parts.append(

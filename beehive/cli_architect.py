@@ -241,6 +241,56 @@ def edit_ticket(ctx, ticket_id: str, title: Optional[str], description: Optional
     console.print(f"[green]✓[/green] Updated ticket [cyan]{ticket.ticket_id}[/cyan]")
 
 
+def _build_plan_context(current_ticket, plan) -> Optional[str]:
+    """Build plan context string showing previous and future tickets.
+
+    Returns None for single-ticket plans or parallel plans where
+    ordering doesn't matter.
+    """
+    sorted_tickets = sorted(plan.tickets, key=lambda t: t.order)
+    if len(sorted_tickets) <= 1:
+        return None
+
+    lines = []
+    lines.append(f"Plan: {plan.directive}")
+    lines.append(f"Execution mode: {plan.execution_mode}")
+    lines.append(f"Total tickets: {len(sorted_tickets)}")
+    lines.append("")
+
+    current_order = current_ticket.order
+
+    # Previous tickets (completed/merged work)
+    previous = [t for t in sorted_tickets if t.order < current_order]
+    if previous:
+        lines.append("COMPLETED BEFORE YOUR TASK:")
+        for t in previous:
+            status = str(t.status)
+            lines.append(f"  #{t.order}. [{status}] {t.title}")
+            lines.append(f"     {t.description}")
+            lines.append("")
+
+    # Current ticket marker
+    lines.append(f">>> YOUR TASK (#{current_order}): {current_ticket.title}")
+    lines.append("")
+
+    # Future tickets (not yet started)
+    future = [t for t in sorted_tickets if t.order > current_order]
+    if future:
+        lines.append("PLANNED AFTER YOUR TASK:")
+        for t in future:
+            lines.append(f"  #{t.order}. {t.title}")
+            lines.append(f"     {t.description}")
+            lines.append("")
+
+    lines.append(
+        "IMPORTANT: Focus ONLY on your task. Do not implement work "
+        "that belongs to previous or future tickets. Keep your scope "
+        "limited to exactly what your task describes."
+    )
+
+    return "\n".join(lines)
+
+
 def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
                           session_mgr, tmux, config, docker_mgr,
                           auto_approve, no_docker) -> Optional[str]:
@@ -262,10 +312,15 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
     try:
         use_docker = auto_approve and not no_docker and docker_mgr.is_available()
 
+        # Build plan context for sequential plans so the agent knows
+        # what was done before and what comes after its task.
+        plan_context = _build_plan_context(ticket, plan)
+
         instructions = config.combine_prompts(
             ticket.description,
             base_branch=repo_config.base_branch,
             include_deliverable=auto_approve,
+            plan_context=plan_context,
         )
 
         session = session_mgr.create_session(
