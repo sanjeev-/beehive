@@ -1,0 +1,33 @@
+================================================================================
+PLAN CONTEXT - Your task is part of an ordered plan:
+================================================================================
+
+Plan: Create the sanjeev-/homebrew-tap GitHub repository using 'gh repo create', add the beehive Homebrew formula (Formula/beehive.rb) pointing to the v0.1.0 release tarball with correct SHA256, and verify 'brew tap sanjeev-/tap && brew info beehive' works.
+Execution mode: sequential
+Total tickets: 2
+
+>>> YOUR TASK (#1): Create Homebrew formula for beehive
+
+PLANNED AFTER YOUR TASK:
+  #2. Add Homebrew tap creation instructions
+     Create documentation in the beehive repository explaining how to create and maintain the sanjeev-/homebrew-tap repository. Include step-by-step instructions for: 1) Using 'gh repo create sanjeev-/homebrew-tap --public' to create the tap repository, 2) Copying the Formula/beehive.rb file to the tap repository, 3) Testing the tap with 'brew tap sanjeev-/tap && brew info beehive', and 4) Updating the formula for new releases. Add this to a HOMEBREW.md file or include in README.md.
+
+IMPORTANT: Focus ONLY on your task. Do not implement work that belongs to previous or future tickets. Keep your scope limited to exactly what your task describes.
+
+================================================================================
+TASK INSTRUCTIONS:
+================================================================================
+
+Create a Formula/beehive.rb file in the beehive repository that defines a Homebrew formula for the beehive CLI tool. The formula should point to the v0.1.0 release tarball, include the correct SHA256 hash, specify Python 3.8+ as a dependency, and define the install method to use pip3 to install from the tarball. Include proper metadata like homepage, description, and license. Test that the formula syntax is valid.
+
+================================================================================
+DELIVERABLE - Complete these steps when done:
+================================================================================
+
+When you have completed the task:
+1. git add -A && git commit -m "<descriptive message>"
+2. git push -u origin HEAD
+3. gh pr create --fill --base plan/create-the-sanjeev-homebrew-tap-github-repository--51047e04
+4. gh pr merge --squash
+5. Print the PR URL as the last line of output
+These steps are MANDATORY. You must commit, push, create a PR, and merge it before finishing.
