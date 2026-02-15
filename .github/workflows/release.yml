@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build distribution packages
+        run: python -m build
+
+      - name: Calculate tarball SHA256
+        id: sha
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}' > tarball_sha256.txt
+          echo "sha256=$(cat tarball_sha256.txt)" >> $GITHUB_OUTPUT
+          echo "Tarball SHA256: $(cat tarball_sha256.txt)"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install script dependencies for formula generation
+        run: |
+          pip install toml requests
+
+      - name: Generate Homebrew formula
+        run: |
+          python scripts/generate_formula.py
+        env:
+          TARBALL_SHA256: ${{ steps.sha.outputs.sha256 }}
+
+      - name: Upload formula as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: homebrew-formula
+          path: Formula/beehive.rb

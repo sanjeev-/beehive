@@ -148,9 +148,24 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ## Installation
 
+### Homebrew (Recommended)
+
+```bash
+# Add the Beehive tap
+brew tap sanjeev-/beehive https://github.com/sanjeev-/beehive
+
+# Install Beehive
+brew install beehive
+
+# Verify installation
+beehive --help
+```
+
+### From Source
+
 ```bash
 # Clone and install
-git clone https://github.com/yourusername/beehive.git
+git clone https://github.com/sanjeev-/beehive.git
 cd beehive
 pip install -e .
 
