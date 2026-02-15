@@ -1,0 +1,37 @@
+================================================================================
+PLAN CONTEXT - Your task is part of an ordered plan:
+================================================================================
+
+Plan: Create a GitHub Actions release workflow that triggers on version tags (v*), builds the Python package, and creates a GitHub release with the artifacts. Also add a Makefile release target that prompts for a version tag and pushes it. Test the workflow by creating a v0.1.0 tag.
+Execution mode: sequential
+Total tickets: 3
+
+COMPLETED BEFORE YOUR TASK:
+  #1. [completed] Add GitHub Actions release workflow
+     Create .github/workflows/release.yml that triggers on version tags matching 'v*' pattern. The workflow should: checkout code, set up Python, install dependencies, build the Python package using standard tools (pip wheel), run tests to ensure quality, create a GitHub release using the tag name, and upload the built artifacts (wheel and source distribution) to the release. Include proper error handling and use official GitHub actions where possible.
+
+>>> YOUR TASK (#2): Add Makefile release target
+
+PLANNED AFTER YOUR TASK:
+  #3. Test release workflow with v0.1.0 tag
+     Test the complete release process by creating a v0.1.0 tag. First ensure the package builds correctly and all tests pass. Use the new Makefile release target to create and push the v0.1.0 tag. Verify that the GitHub Actions workflow triggers correctly, builds the package, and creates a release with artifacts. Document any issues found and verify the release artifacts are downloadable and installable.
+
+IMPORTANT: Focus ONLY on your task. Do not implement work that belongs to previous or future tickets. Keep your scope limited to exactly what your task describes.
+
+================================================================================
+TASK INSTRUCTIONS:
+================================================================================
+
+Create a Makefile with a 'release' target that: prompts the user to enter a version number, validates the version format (semantic versioning), creates and pushes a git tag with 'v' prefix (e.g., v1.0.0), and provides clear feedback to the user. Include a 'help' target that documents available commands. Ensure the Makefile works on both macOS and Linux systems.
+
+================================================================================
+DELIVERABLE - Complete these steps when done:
+================================================================================
+
+When you have completed the task:
+1. git add -A && git commit -m "<descriptive message>"
+2. git push -u origin HEAD
+3. gh pr create --fill --base plan/create-a-github-actions-release-workflow-that-trig-65acc1cb
+4. gh pr merge --squash
+5. Print the PR URL as the last line of output
+These steps are MANDATORY. You must commit, push, create a PR, and merge it before finishing.
