@@ -152,7 +152,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ```bash
 # Add the Beehive tap
-brew tap sanjeev-/beehive https://github.com/sanjeev-/beehive
+brew tap sanjeev-/tap
 
 # Install Beehive
 brew install beehive
