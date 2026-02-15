@@ -178,7 +178,7 @@ class DataStore:
         """Find a PR URL for a given branch via gh CLI."""
         try:
             result = subprocess.run(
-                ["gh", "pr", "list", "--head", branch_name, "--json", "url", "--limit", "1"],
+                ["gh", "pr", "list", "--head", branch_name, "--state", "all", "--json", "url", "--limit", "1"],
                 capture_output=True, text=True, timeout=15,
                 cwd=repo_path,
             )
@@ -1658,9 +1658,8 @@ class BeehiveApp(App):
 
     def _do_refresh(self) -> None:
         try:
-            # Sync ticket statuses before refreshing architect view
-            if self.current_view in ("home", "architects"):
-                self.store.sync_architect_tickets()
+            # Always sync architect tickets (GitHub calls are rate-limited)
+            self.store.sync_architect_tickets()
 
             if self.current_view == "home":
                 self.query_one("#home-view", HomeView).refresh_data(self.store)
