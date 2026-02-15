@@ -57,11 +57,41 @@ claude --version
 
 ## Installation
 
-### Option 1: Install from source (Development)
+### Option 1: Homebrew (Recommended)
+
+The easiest way to install Beehive on macOS or Linux is using Homebrew:
+
+```bash
+# Add the Beehive tap
+brew tap sanjeev-/beehive https://github.com/sanjeev-/beehive
+
+# Install Beehive
+brew install beehive
+
+# Verify installation
+beehive --help
+```
+
+This will automatically install:
+- Python 3.12 (if not already installed)
+- All Python dependencies in an isolated environment
+- The `beehive` command in your PATH
+
+### Option 2: Install using pip
+
+```bash
+# Install from PyPI (when published)
+pip install beehive-cli
+
+# Or install the latest from GitHub
+pip install git+https://github.com/sanjeev-/beehive.git
+```
+
+### Option 3: Install from source (Development)
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/beehive.git
+git clone https://github.com/sanjeev-/beehive.git
 cd beehive
 
 # Create a virtual environment (recommended)
@@ -79,22 +109,16 @@ pip install -e .
 beehive --help
 ```
 
-### Option 2: Install using pip (when published)
-
-```bash
-pip install beehive-cli
-```
-
 ## Verify Installation
 
 ### Test the CLI
 
 ```bash
-# Using python -m
-python3 -m beehive --help
-
-# Or if installed with pip
+# If installed with Homebrew or pip
 beehive --help
+
+# Or using python -m (if installed from source)
+python3 -m beehive --help
 ```
 
 You should see:
@@ -149,21 +173,21 @@ Try creating your first session:
 cd ~/code/your-project
 
 # Create a test session
-python3 -m beehive create test-session \
+beehive create test-session \
   -i "Write a hello world function in Python" \
   -w .
 
 # List sessions
-python3 -m beehive list
+beehive list
 
 # View logs
-python3 -m beehive logs test-session -f
+beehive logs test-session -f
 
 # Stop the session
-python3 -m beehive stop test-session
+beehive stop test-session
 
 # Delete the session
-python3 -m beehive delete test-session
+beehive delete test-session
 ```
 
 ## Troubleshooting
@@ -209,6 +233,13 @@ chmod 644 ~/.beehive/sessions.json
 
 ## Updating
 
+### Homebrew
+
+```bash
+brew update
+brew upgrade beehive
+```
+
 ### From source
 
 ```bash
@@ -226,6 +257,10 @@ pip install --upgrade beehive-cli
 ## Uninstallation
 
 ```bash
+# If installed with Homebrew
+brew uninstall beehive
+brew untap sanjeev-/beehive
+
 # If installed with pip
 pip uninstall beehive-cli
 
@@ -244,7 +279,7 @@ rm -rf ~/.beehive
 If you encounter issues:
 
 1. Check the [Troubleshooting](#troubleshooting) section above
-2. Search existing issues: https://github.com/yourusername/beehive/issues
+2. Search existing issues: https://github.com/sanjeev-/beehive/issues
 3. Open a new issue with:
    - Your operating system and version
    - Python version
