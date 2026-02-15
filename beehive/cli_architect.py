@@ -766,10 +766,25 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
             # 4. Check if all tickets are terminal
             terminal_statuses = {TicketStatus.MERGED, TicketStatus.FAILED}
             all_terminal = all(t.status in terminal_statuses for t in plan.tickets)
+
             if all_terminal:
-                console.print("\n[green bold]All tickets are terminal (merged or failed). Done![/green bold]")
-                _print_tickets_table(plan.tickets)
-                break
+                if not plan.feature_pr_url:
+                    # First time all terminal — create the feature branch PR + preview
+                    _create_feature_pr_and_preview(plan, arch, storage, data_dir)
+                    _print_tickets_table(plan.tickets)
+                else:
+                    # Feature PR exists — check if it's been merged
+                    pr_state = _get_pr_state(plan.feature_pr_url)
+                    if pr_state == "MERGED":
+                        # Tear down preview and exit
+                        _stop_plan_preview(plan, data_dir)
+                        plan.updated_at = datetime.utcnow()
+                        storage.save_plan(arch.architect_id, plan)
+                        console.print("\n[green bold]Feature branch PR merged! Plan complete.[/green bold]")
+                        _print_tickets_table(plan.tickets)
+                        break
+                    else:
+                        console.print(f"[dim]Feature PR open: {plan.feature_pr_url} — waiting for merge...[/dim]")
 
             # Show brief status
             counts = {}
@@ -792,6 +807,138 @@ def _find_project_for_architect(architect_id: str, data_dir: Path):
         if architect_id in proj.architect_ids:
             return proj
     return None
+
+
+def _stop_plan_preview(plan, data_dir: Path) -> None:
+    """Stop the preview environment for a plan if one is running."""
+    if not plan.preview_url:
+        return
+    from beehive.core.preview import PreviewManager
+
+    preview_mgr = PreviewManager(data_dir)
+    preview_mgr.stop_preview(f"plan-{plan.plan_id}")
+    plan.preview_url = None
+    console.print("[dim]Preview environment stopped.[/dim]")
+
+
+def _create_feature_pr_and_preview(plan, arch, storage, data_dir: Path) -> None:
+    """Create a feature branch PR and optionally start a preview environment."""
+    if not plan.base_branch:
+        return
+    if plan.feature_pr_url:
+        return
+
+    from beehive.core.git_ops import GitOperations
+
+    # Find the project linked to this architect (for preview config)
+    project = _find_project_for_architect(arch.architect_id, data_dir)
+
+    # Build ticket summary table for PR body
+    sorted_tickets = sorted(plan.tickets, key=lambda t: t.order)
+    ticket_rows = []
+    for t in sorted_tickets:
+        pr_link = f"[{t.pr_url.split('/')[-1]}]({t.pr_url})" if t.pr_url else "—"
+        ticket_rows.append(f"| {t.order} | {t.title} | {t.status} | {pr_link} |")
+    ticket_table = "\n".join(ticket_rows)
+
+    # Collect unique repos used by tickets
+    seen_repos = set()
+    for ticket in plan.tickets:
+        seen_repos.add(ticket.repo)
+
+    for repo_name in seen_repos:
+        repo_config = next((r for r in arch.repos if r.name == repo_name), None)
+        if not repo_config:
+            continue
+
+        repo_path = Path(repo_config.path)
+        git = GitOperations(repo_path)
+
+        # Get diff stats
+        try:
+            git._run_git("fetch", "origin", plan.base_branch, check=False)
+            diff_stat = git.get_diff_stat(plan.base_branch, repo_config.base_branch)
+        except Exception:
+            diff_stat = ""
+
+        # Start preview if project has preview config
+        preview_url = None
+        if project and project.preview and not plan.preview_url:
+            try:
+                from beehive.core.preview import PreviewManager
+
+                preview_mgr = PreviewManager(data_dir)
+
+                # Create a worktree for the feature branch to run preview
+                worktree_path = data_dir / "worktrees" / f"plan-{plan.plan_id}"
+                if not worktree_path.exists():
+                    git.create_worktree_existing_branch(plan.base_branch, worktree_path)
+
+                preview_url = preview_mgr.start_preview(
+                    session_id=f"plan-{plan.plan_id}",
+                    task_name=f"plan-{plan.plan_id}",
+                    working_directory=str(worktree_path),
+                    setup_command=project.preview.setup_command,
+                    teardown_command=project.preview.teardown_command,
+                    url_template=project.preview.url_template,
+                    startup_timeout=project.preview.startup_timeout,
+                )
+                plan.preview_url = preview_url
+                console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
+            except Exception as e:
+                console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
+
+        # Build PR body
+        preview_section = ""
+        if plan.preview_url:
+            preview_section = f"\n**Preview:** [{plan.preview_url}]({plan.preview_url})\n"
+
+        pr_body = (
+            f"## Plan: {plan.directive}\n\n"
+            f"### Tickets\n"
+            f"| # | Title | Status | PR |\n"
+            f"|---|-------|--------|----|\n"
+            f"{ticket_table}\n"
+            f"{preview_section}\n"
+            f"### Changes\n"
+            f"```\n{diff_stat}```\n\n"
+            f"---\n"
+            f"*Generated by [Beehive](https://github.com/sanjeev-/beehive)*"
+        )
+
+        # Generate PR title
+        directive_short = plan.directive[:60]
+        pr_title = f"[Plan] {directive_short}"
+
+        # Create the PR
+        try:
+            result = subprocess.run(
+                [
+                    "gh", "pr", "create",
+                    "--base", repo_config.base_branch,
+                    "--head", plan.base_branch,
+                    "--title", pr_title,
+                    "--body", pr_body,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=repo_path,
+            )
+            if result.returncode == 0:
+                pr_url = result.stdout.strip()
+                plan.feature_pr_url = pr_url
+                console.print(f"\n[green bold]Feature branch PR created:[/green bold] {pr_url}")
+            else:
+                console.print(f"[yellow]Warning: PR creation failed: {result.stderr.strip()}[/yellow]")
+        except Exception as e:
+            console.print(f"[yellow]Warning: PR creation failed: {e}[/yellow]")
+
+        # Only process the first repo (store its PR URL)
+        break
+
+    plan.updated_at = datetime.utcnow()
+    storage.save_plan(arch.architect_id, plan)
 
 
 def _print_tickets_table(tickets):

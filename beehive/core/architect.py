@@ -54,6 +54,8 @@ class Plan(BaseModel):
     execution_mode: str = "sequential"  # "sequential" or "parallel"
     auto_merge: bool = False  # agents auto-merge PRs into feature branch
     base_branch: Optional[str] = None  # plan's feature branch name
+    feature_pr_url: Optional[str] = None  # PR from feature branch → main
+    preview_url: Optional[str] = None  # preview env for the feature branch
     tickets: list[Ticket] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

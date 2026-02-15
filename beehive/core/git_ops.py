@@ -142,6 +142,12 @@ class GitOperations:
             "worktree", "add", "-b", branch_name, str(worktree_path), base
         )
 
+    def create_worktree_existing_branch(self, branch_name: str, worktree_path: Path) -> None:
+        """Create a worktree for an existing branch (no -b flag)."""
+        worktree_path = Path(worktree_path).resolve()
+        self._run_git("fetch", "origin", branch_name, check=False)
+        self._run_git("worktree", "add", str(worktree_path), branch_name)
+
     def clone_for_docker(
         self, branch_name: str, clone_path: Path, base_branch: str = "main"
     ) -> None:

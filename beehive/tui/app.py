@@ -178,6 +178,14 @@ class DataStore:
                         ticket.updated_at = datetime.utcnow()
                         changed = True
 
+        # 3. Feature branch PR monitoring (after all ticket sync)
+        if do_gh_sync and plan.feature_pr_url:
+            pr_state = self._get_pr_state(plan.feature_pr_url)
+            if pr_state == "MERGED" and plan.preview_url:
+                self.preview_mgr.stop_preview(f"plan-{plan.plan_id}")
+                plan.preview_url = None
+                changed = True
+
         return changed
 
     @staticmethod
@@ -857,6 +865,19 @@ class ArchitectsView(Container):
             f'[#888888]Directive[/]    {p.directive[:120]}\n'
             f"[#888888]Created[/]      {p.created_at.strftime('%Y-%m-%d %H:%M')}"
         )
+        if p.feature_pr_url:
+            detail += f"\n[#888888]Feature PR[/]   [#CCCCCC]{p.feature_pr_url}[/]"
+        if p.preview_url:
+            detail += f"\n[#888888]Preview[/]      [#CCCCCC]{p.preview_url}[/]"
+
+        # Plan completion status
+        terminal_statuses = {TicketStatus.MERGED, "merged", TicketStatus.FAILED, "failed"}
+        all_terminal = all(str(t.status) in ("merged", "failed") for t in p.tickets) if p.tickets else False
+        if all_terminal and not p.feature_pr_url:
+            detail += "\n\n[#FEE100]All tickets terminal — run watch to create feature PR[/]"
+        elif all_terminal and p.feature_pr_url:
+            detail += "\n\n[#5a8a5a]Feature PR created — waiting for merge[/]"
+
         if self._can_assign_next():
             detail += "\n\n[#FEE100]Ready to assign next ticket (a)[/]"
         self.query_one("#arch-detail-content", Static).update(detail)
