@@ -6,7 +6,22 @@ build-backend = "setuptools.build_meta"
 name = "beehive-cli"
 version = "0.1.0"
 description = "Manage multiple Claude Code agent sessions"
+readme = "README.md"
 requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [{name = "Sanjeev"}]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Build Tools",
+]
 dependencies = [
     "click>=8.1.0",
     "pydantic>=2.0.0",
@@ -16,15 +31,23 @@ dependencies = [
     "textual>=0.80.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/sanjeev-/beehive"
+Repository = "https://github.com/sanjeev-/beehive"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["beehive*"]
+
+[tool.setuptools.package-data]
+beehive = ["tui/*.tcss"]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "black>=23.0.0",
     "ruff>=0.1.0",
+    "build>=1.0.0",
 ]
 
 [project.scripts]
