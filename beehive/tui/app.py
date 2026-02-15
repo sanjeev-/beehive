@@ -83,16 +83,22 @@ class DataStore:
         # Auto-complete sessions whose agent process has finished
         self.session_mgr.auto_complete_sessions()
 
+        # Decide once whether this cycle includes GitHub API calls
+        now = time.time()
+        do_gh_sync = now - self._last_gh_sync >= self._GH_SYNC_INTERVAL
+        if do_gh_sync:
+            self._last_gh_sync = now
+
         architects = self.architect_storage.load_all_architects()
         for arch in architects:
             repo_paths = {r.name: r.path for r in arch.repos}
             for plan in arch.plans:
-                changed = self._sync_plan_tickets(plan, repo_paths)
+                changed = self._sync_plan_tickets(plan, repo_paths, do_gh_sync)
                 if changed:
                     plan.updated_at = datetime.utcnow()
                     self.architect_storage.save_plan(arch.architect_id, plan)
 
-    def _sync_plan_tickets(self, plan, repo_paths: dict) -> bool:
+    def _sync_plan_tickets(self, plan, repo_paths: dict, do_gh_sync: bool = False) -> bool:
         """Sync a single plan's tickets. Returns True if anything changed."""
         changed = False
 
@@ -144,10 +150,8 @@ class DataStore:
                     ticket.updated_at = datetime.utcnow()
                     changed = True
 
-        # 2. GitHub-based sync (expensive — rate-limited)
-        now = time.time()
-        if now - self._last_gh_sync >= self._GH_SYNC_INTERVAL:
-            self._last_gh_sync = now
+        # 2. GitHub-based sync (expensive — caller decides)
+        if do_gh_sync:
             for ticket in plan.tickets:
                 if ticket.status in (TicketStatus.MERGED, TicketStatus.FAILED, TicketStatus.PENDING):
                     continue
