@@ -1,7 +1,12 @@
 """Beehive TUI Application — terminal dashboard."""
 
+from __future__ import annotations
+
+import json
 import subprocess
 import shutil
+import time
+from datetime import datetime
 from pathlib import Path
 
 from textual import events
@@ -46,6 +51,8 @@ from beehive.tui.modals import (
 class DataStore:
     """Reads beehive data from disk. Shared by all views."""
 
+    _GH_SYNC_INTERVAL: float = 30.0  # seconds between GitHub API calls
+
     def __init__(self, data_dir: Path):
         self.data_dir = data_dir
         self.session_mgr = SessionManager(data_dir)
@@ -55,6 +62,7 @@ class DataStore:
         self.preview_mgr = PreviewManager(data_dir)
         self.tmux = TmuxManager()
         self.docker = DockerManager()
+        self._last_gh_sync: float = 0.0
 
     def sessions(self):
         return self.session_mgr.list_sessions()
@@ -67,6 +75,132 @@ class DataStore:
 
     def researchers(self):
         return self.researcher_storage.load_all_researchers()
+
+    # ─── Ticket status sync ──────────────────────────────────────────────────
+
+    def sync_architect_tickets(self) -> None:
+        """Sync ticket statuses from sessions and GitHub. Persists changes."""
+        architects = self.architect_storage.load_all_architects()
+        for arch in architects:
+            repo_paths = {r.name: r.path for r in arch.repos}
+            for plan in arch.plans:
+                changed = self._sync_plan_tickets(plan, repo_paths)
+                if changed:
+                    plan.updated_at = datetime.utcnow()
+                    self.architect_storage.save_plan(arch.architect_id, plan)
+
+    def _sync_plan_tickets(self, plan, repo_paths: dict) -> bool:
+        """Sync a single plan's tickets. Returns True if anything changed."""
+        changed = False
+
+        # 1. Session-based sync (cheap — every refresh)
+        for ticket in plan.tickets:
+            if not ticket.session_id:
+                continue
+            if ticket.status in (TicketStatus.MERGED, TicketStatus.FAILED):
+                continue
+
+            session = self.session_mgr.get_session(ticket.session_id)
+            if not session:
+                continue
+
+            # Copy branch_name from session if missing on ticket
+            if session.branch_name and not ticket.branch_name:
+                ticket.branch_name = session.branch_name
+                ticket.updated_at = datetime.utcnow()
+                changed = True
+
+            # Copy pr_url from session if available
+            if session.pr_url and not ticket.pr_url:
+                ticket.pr_url = session.pr_url
+                ticket.updated_at = datetime.utcnow()
+                changed = True
+
+            # Status transitions based on session state
+            if ticket.status == TicketStatus.ASSIGNED:
+                if session.status == SessionStatus.RUNNING:
+                    ticket.status = TicketStatus.IN_PROGRESS
+                    ticket.updated_at = datetime.utcnow()
+                    changed = True
+                elif session.status == SessionStatus.COMPLETED:
+                    ticket.status = TicketStatus.COMPLETED
+                    ticket.updated_at = datetime.utcnow()
+                    changed = True
+                elif session.status in (SessionStatus.FAILED, SessionStatus.STOPPED):
+                    ticket.status = TicketStatus.FAILED
+                    ticket.updated_at = datetime.utcnow()
+                    changed = True
+
+            elif ticket.status == TicketStatus.IN_PROGRESS:
+                if session.status == SessionStatus.COMPLETED:
+                    ticket.status = TicketStatus.COMPLETED
+                    ticket.updated_at = datetime.utcnow()
+                    changed = True
+                elif session.status in (SessionStatus.FAILED, SessionStatus.STOPPED):
+                    ticket.status = TicketStatus.FAILED
+                    ticket.updated_at = datetime.utcnow()
+                    changed = True
+
+        # 2. GitHub-based sync (expensive — rate-limited)
+        now = time.time()
+        if now - self._last_gh_sync >= self._GH_SYNC_INTERVAL:
+            self._last_gh_sync = now
+            for ticket in plan.tickets:
+                if ticket.status in (TicketStatus.MERGED, TicketStatus.FAILED, TicketStatus.PENDING):
+                    continue
+
+                # Try to discover PR URL if we have a branch but no PR URL
+                if ticket.branch_name and not ticket.pr_url:
+                    repo_path = repo_paths.get(ticket.repo)
+                    if repo_path:
+                        pr_url = self._find_pr_for_branch(ticket.branch_name, repo_path)
+                        if pr_url:
+                            ticket.pr_url = pr_url
+                            ticket.updated_at = datetime.utcnow()
+                            changed = True
+
+                # Check if PR is merged
+                if ticket.pr_url and ticket.status in (
+                    TicketStatus.COMPLETED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS
+                ):
+                    if self._check_pr_merged(ticket.pr_url):
+                        ticket.status = TicketStatus.MERGED
+                        ticket.updated_at = datetime.utcnow()
+                        changed = True
+
+        return changed
+
+    @staticmethod
+    def _find_pr_for_branch(branch_name: str, repo_path: str) -> str | None:
+        """Find a PR URL for a given branch via gh CLI."""
+        try:
+            result = subprocess.run(
+                ["gh", "pr", "list", "--head", branch_name, "--json", "url", "--limit", "1"],
+                capture_output=True, text=True, timeout=15,
+                cwd=repo_path,
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                if data:
+                    return data[0].get("url")
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _check_pr_merged(pr_url: str) -> bool:
+        """Check if a GitHub PR is merged via gh CLI."""
+        try:
+            result = subprocess.run(
+                ["gh", "pr", "view", pr_url, "--json", "state"],
+                capture_output=True, text=True, timeout=15,
+            )
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                return data.get("state") == "MERGED"
+        except Exception:
+            pass
+        return False
 
 
 # ─── Header ───────────────────────────────────────────────────────────────────
@@ -617,6 +751,17 @@ class ArchitectsView(Container):
         self._loading = True
         try:
             self._architects = store.architects()
+            # Re-resolve selected objects after reload so synced data is visible
+            if self._selected_arch:
+                for a in self._architects:
+                    if a.architect_id == self._selected_arch.architect_id:
+                        self._selected_arch = a
+                        if self._selected_plan:
+                            for p in a.plans:
+                                if p.plan_id == self._selected_plan.plan_id:
+                                    self._selected_plan = p
+                                    break
+                        break
             if self.depth == 0:
                 self._show_architects_list()
             elif self.depth == 1:
@@ -647,15 +792,17 @@ class ArchitectsView(Container):
             f"Architects  \u203a  [bold #FFFFFF]{a.name}[/]  \u203a  Plans"
         )
         table = self.query_one("#arch-table", DataTable)
-        self._set_columns(table, "plans", ("Id", "Directive", "Tickets", "Pending", "Done", "Failed"))
+        self._set_columns(table, "plans", ("Id", "Directive", "Tickets", "Pending", "Active", "Review", "Merged", "Failed"))
         for p in a.plans:
             pending = sum(1 for t in p.tickets if t.status in (TicketStatus.PENDING, "pending"))
-            done = sum(1 for t in p.tickets if t.status in (TicketStatus.COMPLETED, "completed", TicketStatus.MERGED, "merged"))
+            active = sum(1 for t in p.tickets if t.status in (TicketStatus.ASSIGNED, "assigned", TicketStatus.IN_PROGRESS, "in_progress"))
+            review = sum(1 for t in p.tickets if t.status in (TicketStatus.COMPLETED, "completed"))
+            merged = sum(1 for t in p.tickets if t.status in (TicketStatus.MERGED, "merged"))
             failed = sum(1 for t in p.tickets if t.status in (TicketStatus.FAILED, "failed"))
             directive = p.directive[:50] + ("..." if len(p.directive) > 50 else "")
             table.add_row(
                 p.plan_id[:8], directive, str(len(p.tickets)),
-                str(pending), str(done), str(failed),
+                str(pending), str(active), str(review), str(merged), str(failed),
             )
 
         detail = (
@@ -679,12 +826,12 @@ class ArchitectsView(Container):
         self._sorted_tickets = sorted(p.tickets, key=lambda t: t.order)
         for t in self._sorted_tickets:
             status_display = {
-                "pending": "[#FEE100]pending[/]",
+                "pending": "[#888888]pending[/]",
                 "assigned": "[#5577bb]assigned[/]",
-                "in_progress": "[#FEE100]in progress[/]",
-                "completed": "[#5a8a5a]completed[/]",
+                "in_progress": "[#E5A800]working[/]",
+                "completed": "[#D4663A]review[/]",
                 "failed": "[#b84040]failed[/]",
-                "merged": "[#55bbbb]merged[/]",
+                "merged": "[#5a8a5a]merged[/]",
             }.get(str(t.status), str(t.status))
             branch = t.branch_name or "—"
             if len(branch) > 25:
@@ -1508,6 +1655,10 @@ class BeehiveApp(App):
 
     def _do_refresh(self) -> None:
         try:
+            # Sync ticket statuses before refreshing architect view
+            if self.current_view in ("home", "architects"):
+                self.store.sync_architect_tickets()
+
             if self.current_view == "home":
                 self.query_one("#home-view", HomeView).refresh_data(self.store)
             elif self.current_view == "projects":
