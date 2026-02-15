@@ -162,13 +162,20 @@ class BeehiveConfig:
         """Return the path to the CLAUDE.md template file."""
         return self.claude_md_file
 
-    def inject_claude_md(self, worktree_path: Path) -> bool:
-        """Copy/prepend the default CLAUDE.md template into a worktree.
+    def inject_claude_md(
+        self, worktree_path: Path, project_claude_md: Optional[str] = None
+    ) -> bool:
+        """Copy/prepend CLAUDE.md templates into a worktree.
+
+        Layers (top to bottom in the resulting file):
+          1. Global beehive defaults (~/.beehive/CLAUDE.md)
+          2. Project-level CLAUDE.md (passed in)
+          3. Repo-level CLAUDE.md (already in the worktree)
 
         Returns True if the file was written/modified, False otherwise.
         """
-        template = self.get_claude_md()
-        if not template:
+        global_template = self.get_claude_md()
+        if not global_template and not project_claude_md:
             return False
 
         target = Path(worktree_path) / "CLAUDE.md"
@@ -178,13 +185,21 @@ class BeehiveConfig:
             # Already injected — idempotent no-op
             if CLAUDE_MD_MARKER in existing:
                 return False
-            # Prepend beehive defaults above existing content
-            combined = (
-                f"{CLAUDE_MD_MARKER}\n{template}\n\n---\n\n"
-                f"{CLAUDE_MD_PROJECT_MARKER}\n{existing}"
-            )
-            target.write_text(combined)
+            # Build combined content: global > project > repo
+            parts = []
+            parts.append(CLAUDE_MD_MARKER)
+            if global_template:
+                parts.append(global_template)
+            if project_claude_md:
+                parts.append(f"\n---\n\n{CLAUDE_MD_PROJECT_MARKER}\n{project_claude_md}")
+            parts.append(f"\n---\n\n{existing}")
+            target.write_text("\n".join(parts))
         else:
-            target.write_text(f"{CLAUDE_MD_MARKER}\n{template}\n")
+            parts = [CLAUDE_MD_MARKER]
+            if global_template:
+                parts.append(global_template)
+            if project_claude_md:
+                parts.append(f"\n---\n\n{CLAUDE_MD_PROJECT_MARKER}\n{project_claude_md}")
+            target.write_text("\n".join(parts) + "\n")
 
         return True

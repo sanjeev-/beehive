@@ -267,6 +267,86 @@ def project_unlink(ctx, project_id: str, architect_id: str):
     )
 
 
+# ─── Project CLAUDE.md commands ──────────────────────────────────────────────
+
+
+@project.group("claude-md")
+@click.pass_context
+def project_claude_md(ctx):
+    """Manage project-level CLAUDE.md."""
+    ctx.ensure_object(dict)
+
+
+@project_claude_md.command("show")
+@click.argument("project_id")
+@click.pass_context
+def project_claude_md_show(ctx, project_id: str):
+    """Show the project CLAUDE.md."""
+    project_storage, _, _ = _get_storage(ctx)
+    proj = project_storage.load_project(project_id)
+
+    if not proj:
+        console.print(f"[red]Project {project_id} not found[/red]")
+        sys.exit(1)
+
+    content = project_storage.get_project_claude_md(proj.project_id)
+    if content:
+        console.print(content)
+    else:
+        console.print("[dim]No project CLAUDE.md configured.[/dim]")
+        path = project_storage.get_project_claude_md_path(proj.project_id)
+        console.print(f"[dim]Set one with: beehive project claude-md set {project_id} @file.md[/dim]")
+
+
+@project_claude_md.command("set")
+@click.argument("project_id")
+@click.argument("content")
+@click.pass_context
+def project_claude_md_set(ctx, project_id: str, content: str):
+    """Set the project CLAUDE.md. Use @filename to read from a file."""
+    project_storage, _, _ = _get_storage(ctx)
+    proj = project_storage.load_project(project_id)
+
+    if not proj:
+        console.print(f"[red]Project {project_id} not found[/red]")
+        sys.exit(1)
+
+    if content.startswith("@"):
+        filepath = Path(content[1:]).expanduser()
+        if not filepath.exists():
+            console.print(f"[red]File not found: {filepath}[/red]")
+            sys.exit(1)
+        content = filepath.read_text()
+
+    project_storage.set_project_claude_md(proj.project_id, content)
+    console.print(f"[green]✓[/green] Set project CLAUDE.md for [bold]{proj.name}[/bold]")
+
+
+@project_claude_md.command("edit")
+@click.argument("project_id")
+@click.pass_context
+def project_claude_md_edit(ctx, project_id: str):
+    """Edit the project CLAUDE.md in $EDITOR."""
+    import os
+    import subprocess
+
+    project_storage, _, _ = _get_storage(ctx)
+    proj = project_storage.load_project(project_id)
+
+    if not proj:
+        console.print(f"[red]Project {project_id} not found[/red]")
+        sys.exit(1)
+
+    path = project_storage.get_project_claude_md_path(proj.project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_text("")
+
+    editor = os.environ.get("EDITOR", "vi")
+    subprocess.run([editor, str(path)])
+    console.print(f"[green]✓[/green] Project CLAUDE.md saved at [dim]{path}[/dim]")
+
+
 # ─── Preview commands ─────────────────────────────────────────────────────────
 
 

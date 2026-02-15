@@ -97,16 +97,33 @@ def test_inject_prepends_to_existing_claude_md(config, tmp_path):
     config.set_claude_md("# Beehive Rules")
     worktree = tmp_path / "worktree"
     worktree.mkdir()
-    (worktree / "CLAUDE.md").write_text("# Project-specific rules\nDo Y.")
+    (worktree / "CLAUDE.md").write_text("# Repo-specific rules\nDo Y.")
 
     assert config.inject_claude_md(worktree) is True
     content = (worktree / "CLAUDE.md").read_text()
     assert CLAUDE_MD_MARKER in content
-    assert CLAUDE_MD_PROJECT_MARKER in content
     assert "# Beehive Rules" in content
-    assert "# Project-specific rules\nDo Y." in content
+    assert "# Repo-specific rules\nDo Y." in content
     # Beehive defaults should come first
-    assert content.index(CLAUDE_MD_MARKER) < content.index(CLAUDE_MD_PROJECT_MARKER)
+    assert content.index(CLAUDE_MD_MARKER) < content.index("# Repo-specific rules")
+
+
+def test_inject_with_project_claude_md(config, tmp_path):
+    config.set_claude_md("# Global Rules")
+    worktree = tmp_path / "worktree"
+    worktree.mkdir()
+    (worktree / "CLAUDE.md").write_text("# Repo rules")
+
+    assert config.inject_claude_md(worktree, project_claude_md="# Project Rules") is True
+    content = (worktree / "CLAUDE.md").read_text()
+    assert CLAUDE_MD_MARKER in content
+    assert CLAUDE_MD_PROJECT_MARKER in content
+    assert "# Global Rules" in content
+    assert "# Project Rules" in content
+    assert "# Repo rules" in content
+    # Order: global < project < repo
+    assert content.index("# Global Rules") < content.index("# Project Rules")
+    assert content.index("# Project Rules") < content.index("# Repo rules")
 
 
 def test_inject_is_idempotent(config, tmp_path):
