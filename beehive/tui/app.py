@@ -166,11 +166,14 @@ class DataStore:
                             ticket.updated_at = datetime.utcnow()
                             changed = True
 
-                # Check if PR is merged
+                # Check if PR is merged or closed
                 if ticket.pr_url and ticket.status in (
                     TicketStatus.COMPLETED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS
                 ):
-                    if self._check_pr_merged(ticket.pr_url):
+                    pr_state = self._get_pr_state(ticket.pr_url)
+                    if pr_state == "MERGED" or (
+                        pr_state == "CLOSED" and ticket.status == TicketStatus.COMPLETED
+                    ):
                         ticket.status = TicketStatus.MERGED
                         ticket.updated_at = datetime.utcnow()
                         changed = True
@@ -195,8 +198,8 @@ class DataStore:
         return None
 
     @staticmethod
-    def _check_pr_merged(pr_url: str) -> bool:
-        """Check if a GitHub PR is merged via gh CLI."""
+    def _get_pr_state(pr_url: str) -> str | None:
+        """Get a GitHub PR's state via gh CLI. Returns OPEN/MERGED/CLOSED or None."""
         try:
             result = subprocess.run(
                 ["gh", "pr", "view", pr_url, "--json", "state"],
@@ -204,10 +207,10 @@ class DataStore:
             )
             if result.returncode == 0:
                 data = json.loads(result.stdout)
-                return data.get("state") == "MERGED"
+                return data.get("state")
         except Exception:
             pass
-        return False
+        return None
 
 
 # ─── Header ───────────────────────────────────────────────────────────────────

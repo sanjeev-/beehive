@@ -861,42 +861,53 @@ class TestSequentialLogic:
         # T2 should be assignable
 
 
-class TestCheckPrMerged:
+class TestGetPrState:
     @patch("beehive.cli_architect.subprocess.run")
     def test_pr_merged(self, mock_run):
-        """Returns True when PR state is MERGED."""
-        from beehive.cli_architect import _check_pr_merged
+        """Returns MERGED when PR state is MERGED."""
+        from beehive.cli_architect import _get_pr_state
 
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout='{"state": "MERGED"}',
         )
-        assert _check_pr_merged("https://github.com/test/repo/pull/1") is True
+        assert _get_pr_state("https://github.com/test/repo/pull/1") == "MERGED"
         mock_run.assert_called_once()
 
     @patch("beehive.cli_architect.subprocess.run")
     def test_pr_open(self, mock_run):
-        """Returns False when PR state is OPEN."""
-        from beehive.cli_architect import _check_pr_merged
+        """Returns OPEN when PR state is OPEN."""
+        from beehive.cli_architect import _get_pr_state
 
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout='{"state": "OPEN"}',
         )
-        assert _check_pr_merged("https://github.com/test/repo/pull/1") is False
+        assert _get_pr_state("https://github.com/test/repo/pull/1") == "OPEN"
+
+    @patch("beehive.cli_architect.subprocess.run")
+    def test_pr_closed(self, mock_run):
+        """Returns CLOSED when PR state is CLOSED."""
+        from beehive.cli_architect import _get_pr_state
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout='{"state": "CLOSED"}',
+        )
+        assert _get_pr_state("https://github.com/test/repo/pull/1") == "CLOSED"
 
     @patch("beehive.cli_architect.subprocess.run")
     def test_pr_check_failure(self, mock_run):
-        """Returns False when gh command fails."""
-        from beehive.cli_architect import _check_pr_merged
+        """Returns None when gh command fails."""
+        from beehive.cli_architect import _get_pr_state
 
         mock_run.return_value = MagicMock(returncode=1, stdout="")
-        assert _check_pr_merged("https://github.com/test/repo/pull/1") is False
+        assert _get_pr_state("https://github.com/test/repo/pull/1") is None
 
     @patch("beehive.cli_architect.subprocess.run")
     def test_pr_check_exception(self, mock_run):
-        """Returns False when an exception occurs."""
-        from beehive.cli_architect import _check_pr_merged
+        """Returns None when an exception occurs."""
+        from beehive.cli_architect import _get_pr_state
 
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="gh", timeout=15)
-        assert _check_pr_merged("https://github.com/test/repo/pull/1") is False
+        assert _get_pr_state("https://github.com/test/repo/pull/1") is None

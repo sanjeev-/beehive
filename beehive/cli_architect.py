@@ -615,8 +615,8 @@ def _find_pr_for_branch(branch_name: str, repo_path: str):
     return None
 
 
-def _check_pr_merged(pr_url: str) -> bool:
-    """Check if a GitHub PR is merged via `gh pr view`."""
+def _get_pr_state(pr_url: str) -> Optional[str]:
+    """Get a GitHub PR's state via `gh pr view`. Returns OPEN/MERGED/CLOSED or None."""
     try:
         result = subprocess.run(
             ["gh", "pr", "view", pr_url, "--json", "state"],
@@ -624,10 +624,10 @@ def _check_pr_merged(pr_url: str) -> bool:
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
-            return data.get("state") == "MERGED"
+            return data.get("state")
     except Exception:
         pass
-    return False
+    return None
 
 
 def _sync_tickets_from_sessions(plan, session_mgr) -> bool:
@@ -721,12 +721,15 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
                                 f"[dim]Discovered PR for {ticket.title}: {pr_url}[/dim]"
                             )
 
-            # 2. Check for merged PRs
+            # 2. Check for merged/closed PRs
             for ticket in plan.tickets:
                 if ticket.pr_url and ticket.status in (
                     TicketStatus.COMPLETED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS
                 ):
-                    if _check_pr_merged(ticket.pr_url):
+                    pr_state = _get_pr_state(ticket.pr_url)
+                    if pr_state == "MERGED" or (
+                        pr_state == "CLOSED" and ticket.status == TicketStatus.COMPLETED
+                    ):
                         ticket.status = TicketStatus.MERGED
                         ticket.updated_at = datetime.utcnow()
                         synced = True
