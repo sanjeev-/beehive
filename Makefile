@@ -36,6 +36,10 @@ release: build
 		echo "Error: Tag cannot be empty"; \
 		exit 1; \
 	fi; \
+	if ! echo "$$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?(\+[a-zA-Z0-9.-]+)?$$'; then \
+		echo "Error: Tag must follow semantic versioning format (e.g., v1.0.0, v1.0.0-beta, v1.0.0+build)"; \
+		exit 1; \
+	fi; \
 	echo "Creating and pushing tag $$TAG..."; \
 	git tag -a $$TAG -m "Release $$TAG"; \
 	git push origin $$TAG; \
