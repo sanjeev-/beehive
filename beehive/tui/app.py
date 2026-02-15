@@ -80,16 +80,25 @@ class DataStore:
 
     def sync_architect_tickets(self) -> None:
         """Sync ticket statuses from sessions and GitHub. Persists changes."""
+        # Auto-complete sessions whose agent process has finished
+        self.session_mgr.auto_complete_sessions()
+
+        # Decide once whether this cycle includes GitHub API calls
+        now = time.time()
+        do_gh_sync = now - self._last_gh_sync >= self._GH_SYNC_INTERVAL
+        if do_gh_sync:
+            self._last_gh_sync = now
+
         architects = self.architect_storage.load_all_architects()
         for arch in architects:
             repo_paths = {r.name: r.path for r in arch.repos}
             for plan in arch.plans:
-                changed = self._sync_plan_tickets(plan, repo_paths)
+                changed = self._sync_plan_tickets(plan, repo_paths, do_gh_sync)
                 if changed:
                     plan.updated_at = datetime.utcnow()
                     self.architect_storage.save_plan(arch.architect_id, plan)
 
-    def _sync_plan_tickets(self, plan, repo_paths: dict) -> bool:
+    def _sync_plan_tickets(self, plan, repo_paths: dict, do_gh_sync: bool = False) -> bool:
         """Sync a single plan's tickets. Returns True if anything changed."""
         changed = False
 
@@ -141,10 +150,8 @@ class DataStore:
                     ticket.updated_at = datetime.utcnow()
                     changed = True
 
-        # 2. GitHub-based sync (expensive — rate-limited)
-        now = time.time()
-        if now - self._last_gh_sync >= self._GH_SYNC_INTERVAL:
-            self._last_gh_sync = now
+        # 2. GitHub-based sync (expensive — caller decides)
+        if do_gh_sync:
             for ticket in plan.tickets:
                 if ticket.status in (TicketStatus.MERGED, TicketStatus.FAILED, TicketStatus.PENDING):
                     continue
@@ -159,11 +166,14 @@ class DataStore:
                             ticket.updated_at = datetime.utcnow()
                             changed = True
 
-                # Check if PR is merged
+                # Check if PR is merged or closed
                 if ticket.pr_url and ticket.status in (
                     TicketStatus.COMPLETED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS
                 ):
-                    if self._check_pr_merged(ticket.pr_url):
+                    pr_state = self._get_pr_state(ticket.pr_url)
+                    if pr_state == "MERGED" or (
+                        pr_state == "CLOSED" and ticket.status == TicketStatus.COMPLETED
+                    ):
                         ticket.status = TicketStatus.MERGED
                         ticket.updated_at = datetime.utcnow()
                         changed = True
@@ -175,7 +185,7 @@ class DataStore:
         """Find a PR URL for a given branch via gh CLI."""
         try:
             result = subprocess.run(
-                ["gh", "pr", "list", "--head", branch_name, "--json", "url", "--limit", "1"],
+                ["gh", "pr", "list", "--head", branch_name, "--state", "all", "--json", "url", "--limit", "1"],
                 capture_output=True, text=True, timeout=15,
                 cwd=repo_path,
             )
@@ -188,8 +198,8 @@ class DataStore:
         return None
 
     @staticmethod
-    def _check_pr_merged(pr_url: str) -> bool:
-        """Check if a GitHub PR is merged via gh CLI."""
+    def _get_pr_state(pr_url: str) -> str | None:
+        """Get a GitHub PR's state via gh CLI. Returns OPEN/MERGED/CLOSED or None."""
         try:
             result = subprocess.run(
                 ["gh", "pr", "view", pr_url, "--json", "state"],
@@ -197,10 +207,10 @@ class DataStore:
             )
             if result.returncode == 0:
                 data = json.loads(result.stdout)
-                return data.get("state") == "MERGED"
+                return data.get("state")
         except Exception:
             pass
-        return False
+        return None
 
 
 # ─── Header ───────────────────────────────────────────────────────────────────
@@ -1655,9 +1665,8 @@ class BeehiveApp(App):
 
     def _do_refresh(self) -> None:
         try:
-            # Sync ticket statuses before refreshing architect view
-            if self.current_view in ("home", "architects"):
-                self.store.sync_architect_tickets()
+            # Always sync architect tickets (GitHub calls are rate-limited)
+            self.store.sync_architect_tickets()
 
             if self.current_view == "home":
                 self.query_one("#home-view", HomeView).refresh_data(self.store)

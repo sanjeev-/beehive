@@ -61,6 +61,19 @@ class GitOperations:
         # Create branch from base
         self._run_git("checkout", "-b", branch_name, base)
 
+    def create_branch_from(self, branch_name: str, base: str) -> None:
+        """Create a branch from base without checking it out (worktree-safe)."""
+        self._run_git("fetch", "origin", base, check=False)
+        # Prefer origin/<base> if it exists, otherwise fall back to local
+        result = self._run_git(
+            "rev-parse", "--verify", f"origin/{base}", check=False
+        )
+        if result.returncode == 0:
+            base_ref = f"origin/{base}"
+        else:
+            base_ref = base
+        self._run_git("branch", branch_name, base_ref)
+
     def branch_exists(self, branch_name: str) -> bool:
         """Check if branch exists."""
         result = self._run_git("rev-parse", "--verify", branch_name, check=False)

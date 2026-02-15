@@ -127,6 +127,41 @@ class SessionManager:
         self.storage.save_session(session)
         return session
 
+    def auto_complete_sessions(self) -> list[str]:
+        """Detect sessions whose agent process has finished and mark them completed.
+
+        Detection methods:
+        1. `.beehive-done` marker file (written by agent command on exit)
+        2. Docker container no longer running (for docker sessions)
+
+        Returns list of session IDs that were auto-completed.
+        """
+        import subprocess as _sp
+
+        completed_ids = []
+        for session in self.list_sessions(status_filter=SessionStatus.RUNNING):
+            done = False
+
+            # Check 1: marker file
+            done_marker = Path(session.working_directory) / ".beehive-done"
+            if done_marker.exists():
+                done = True
+
+            # Check 2: Docker container exited
+            if not done and session.container_name:
+                result = _sp.run(
+                    ["docker", "inspect", "--format", "{{.State.Running}}", session.container_name],
+                    capture_output=True, text=True,
+                )
+                # Container doesn't exist (removed by --rm) or is not running
+                if result.returncode != 0 or result.stdout.strip() != "true":
+                    done = True
+
+            if done:
+                self.update_session(session.session_id, status=SessionStatus.COMPLETED)
+                completed_ids.append(session.session_id)
+        return completed_ids
+
     def delete_session(self, session_id: str) -> None:
         """Delete a session."""
         self.storage.delete_session(session_id)

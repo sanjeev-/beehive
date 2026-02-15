@@ -16,6 +16,16 @@ When you have completed the task:
 These steps are MANDATORY. You must commit, push, and create a PR before finishing.
 """.strip()
 
+AGENT_DELIVERABLE_INSTRUCTIONS_WITH_MERGE = """
+When you have completed the task:
+1. git add -A && git commit -m "<descriptive message>"
+2. git push -u origin HEAD
+3. gh pr create --fill --base {base_branch}
+4. gh pr merge --squash
+5. Print the PR URL as the last line of output
+These steps are MANDATORY. You must commit, push, create a PR, and merge it before finishing.
+""".strip()
+
 RESEARCH_DELIVERABLE_INSTRUCTIONS = """
 When you have completed the experiment:
 1. Save all results, logs, and artifacts to the working directory
@@ -59,6 +69,8 @@ class BeehiveConfig:
         user_instructions: str,
         base_branch: str = "main",
         include_deliverable: bool = False,
+        plan_context: Optional[str] = None,
+        auto_merge: bool = False,
     ) -> str:
         """
         Combine global system prompt with user instructions.
@@ -67,6 +79,10 @@ class BeehiveConfig:
         ---
         [GLOBAL RULES - All agents must follow these]
         <system prompt content>
+
+        ---
+        [PLAN CONTEXT] (optional - for ordered plans)
+        <previous/future ticket summaries>
 
         ---
         [TASK INSTRUCTIONS]
@@ -87,6 +103,14 @@ class BeehiveConfig:
                 f"{system_prompt}"
             )
 
+        if plan_context:
+            parts.append(
+                f"{'='*80}\n"
+                f"PLAN CONTEXT - Your task is part of an ordered plan:\n"
+                f"{'='*80}\n\n"
+                f"{plan_context}"
+            )
+
         parts.append(
             f"{'='*80}\n"
             f"TASK INSTRUCTIONS:\n"
@@ -95,7 +119,12 @@ class BeehiveConfig:
         )
 
         if include_deliverable:
-            deliverable = AGENT_DELIVERABLE_INSTRUCTIONS.format(
+            template = (
+                AGENT_DELIVERABLE_INSTRUCTIONS_WITH_MERGE
+                if auto_merge
+                else AGENT_DELIVERABLE_INSTRUCTIONS
+            )
+            deliverable = template.format(
                 base_branch=base_branch
             )
             parts.append(

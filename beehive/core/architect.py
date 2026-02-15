@@ -52,6 +52,8 @@ class Plan(BaseModel):
     plan_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     directive: str  # the original high-level request
     execution_mode: str = "sequential"  # "sequential" or "parallel"
+    auto_merge: bool = False  # agents auto-merge PRs into feature branch
+    base_branch: Optional[str] = None  # plan's feature branch name
     tickets: list[Ticket] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

@@ -1,6 +1,7 @@
 """CLI commands for the Architect feature."""
 
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime
@@ -143,8 +144,9 @@ def show_architect(ctx, architect_id: str):
 @architect.command("plan")
 @click.argument("architect_id")
 @click.option("--directive", "-d", required=True, help="High-level directive to plan")
+@click.option("--auto-merge", is_flag=True, help="Agents auto-merge PRs into feature branch")
 @click.pass_context
-def create_plan(ctx, architect_id: str, directive: str):
+def create_plan(ctx, architect_id: str, directive: str, auto_merge: bool):
     """Generate a plan from a directive using Claude."""
     storage = ctx.obj["architect_storage"]
     arch = storage.load_architect(architect_id)
@@ -164,12 +166,41 @@ def create_plan(ctx, architect_id: str, directive: str):
         console.print(f"[red]Error generating plan: {e}[/red]")
         sys.exit(1)
 
+    plan.auto_merge = auto_merge
+
+    # Create a feature branch for this plan
+    from beehive.core.git_ops import GitOperations
+
+    sanitized = re.sub(r"[^a-z0-9-]", "-", directive.lower())
+    sanitized = re.sub(r"-+", "-", sanitized).strip("-")[:50]
+    branch_name = f"plan/{sanitized}-{plan.plan_id}"
+    plan.base_branch = branch_name
+
+    for repo_config in arch.repos:
+        repo_path = Path(repo_config.path)
+        git = GitOperations(repo_path)
+        try:
+            git.create_branch_from(branch_name, repo_config.base_branch)
+            git.push_branch(branch_name)
+            console.print(
+                f"  [dim]Created feature branch [cyan]{branch_name}[/cyan] "
+                f"in {repo_config.name}[/dim]"
+            )
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Could not create feature branch in "
+                f"{repo_config.name}: {e}[/yellow]"
+            )
+
     # Save plan
     storage.save_plan(arch.architect_id, plan)
 
     # Display tickets
     console.print(f"\n[green]✓[/green] Plan created: [cyan]{plan.plan_id}[/cyan]")
     console.print(f"  Directive: {plan.directive}")
+    console.print(f"  Feature branch: [cyan]{plan.base_branch}[/cyan]")
+    if auto_merge:
+        console.print(f"  Auto-merge: [green]enabled[/green]")
     console.print(f"  Tickets: {len(plan.tickets)}\n")
 
     _print_tickets_table(plan.tickets)
@@ -241,6 +272,56 @@ def edit_ticket(ctx, ticket_id: str, title: Optional[str], description: Optional
     console.print(f"[green]✓[/green] Updated ticket [cyan]{ticket.ticket_id}[/cyan]")
 
 
+def _build_plan_context(current_ticket, plan) -> Optional[str]:
+    """Build plan context string showing previous and future tickets.
+
+    Returns None for single-ticket plans or parallel plans where
+    ordering doesn't matter.
+    """
+    sorted_tickets = sorted(plan.tickets, key=lambda t: t.order)
+    if len(sorted_tickets) <= 1:
+        return None
+
+    lines = []
+    lines.append(f"Plan: {plan.directive}")
+    lines.append(f"Execution mode: {plan.execution_mode}")
+    lines.append(f"Total tickets: {len(sorted_tickets)}")
+    lines.append("")
+
+    current_order = current_ticket.order
+
+    # Previous tickets (completed/merged work)
+    previous = [t for t in sorted_tickets if t.order < current_order]
+    if previous:
+        lines.append("COMPLETED BEFORE YOUR TASK:")
+        for t in previous:
+            status = str(t.status)
+            lines.append(f"  #{t.order}. [{status}] {t.title}")
+            lines.append(f"     {t.description}")
+            lines.append("")
+
+    # Current ticket marker
+    lines.append(f">>> YOUR TASK (#{current_order}): {current_ticket.title}")
+    lines.append("")
+
+    # Future tickets (not yet started)
+    future = [t for t in sorted_tickets if t.order > current_order]
+    if future:
+        lines.append("PLANNED AFTER YOUR TASK:")
+        for t in future:
+            lines.append(f"  #{t.order}. {t.title}")
+            lines.append(f"     {t.description}")
+            lines.append("")
+
+    lines.append(
+        "IMPORTANT: Focus ONLY on your task. Do not implement work "
+        "that belongs to previous or future tickets. Keep your scope "
+        "limited to exactly what your task describes."
+    )
+
+    return "\n".join(lines)
+
+
 def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
                           session_mgr, tmux, config, docker_mgr,
                           auto_approve, no_docker) -> Optional[str]:
@@ -262,25 +343,34 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
     try:
         use_docker = auto_approve and not no_docker and docker_mgr.is_available()
 
+        # Use plan's feature branch as base when available
+        base = plan.base_branch if plan.base_branch else repo_config.base_branch
+
+        # Build plan context for sequential plans so the agent knows
+        # what was done before and what comes after its task.
+        plan_context = _build_plan_context(ticket, plan)
+
         instructions = config.combine_prompts(
             ticket.description,
-            base_branch=repo_config.base_branch,
+            base_branch=base,
             include_deliverable=auto_approve,
+            plan_context=plan_context,
+            auto_merge=plan.auto_merge,
         )
 
         session = session_mgr.create_session(
             name=ticket.title,
             instructions=instructions,
             working_dir=repo_path,
-            base_branch=repo_config.base_branch,
+            base_branch=base,
             use_docker=use_docker,
         )
 
         worktree_path = Path(session.working_directory)
         if use_docker:
-            git.clone_for_docker(session.branch_name, worktree_path, repo_config.base_branch)
+            git.clone_for_docker(session.branch_name, worktree_path, base)
         else:
-            git.create_worktree(session.branch_name, worktree_path, repo_config.base_branch)
+            git.create_worktree(session.branch_name, worktree_path, base)
 
         project_claude_md = None
         try:
@@ -384,8 +474,9 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
 @click.option("--parallel", is_flag=True, default=False, help="Assign all pending tickets at once")
 @click.option("--no-auto-approve", is_flag=True, help="Disable auto-approve (-y)")
 @click.option("--no-docker", is_flag=True, help="Force host execution")
+@click.option("--auto-merge", is_flag=True, help="Agents auto-merge PRs into feature branch")
 @click.pass_context
-def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], parallel: bool, no_auto_approve: bool, no_docker: bool):
+def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], parallel: bool, no_auto_approve: bool, no_docker: bool, auto_merge: bool):
     """Assign tickets to beehive agent sessions.
 
     Default (sequential): assigns only the first pending ticket by order.
@@ -426,6 +517,8 @@ def assign_tickets(ctx, architect_id: str, ticket_id: Optional[str], parallel: b
 
     # Store execution mode on plan
     plan.execution_mode = "parallel" if parallel else "sequential"
+    if auto_merge:
+        plan.auto_merge = True
     storage.save_plan(arch.architect_id, plan)
 
     auto_approve = not no_auto_approve
@@ -505,8 +598,25 @@ def plan_status(ctx, architect_id: str, plan_id: Optional[str]):
     _print_tickets_table(plan.tickets)
 
 
-def _check_pr_merged(pr_url: str) -> bool:
-    """Check if a GitHub PR is merged via `gh pr view`."""
+def _find_pr_for_branch(branch_name: str, repo_path: str):
+    """Find a PR URL for a given branch via gh CLI."""
+    try:
+        result = subprocess.run(
+            ["gh", "pr", "list", "--head", branch_name, "--state", "all", "--json", "url", "--limit", "1"],
+            capture_output=True, text=True, timeout=15,
+            cwd=repo_path,
+        )
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            if data:
+                return data[0].get("url")
+    except Exception:
+        pass
+    return None
+
+
+def _get_pr_state(pr_url: str) -> Optional[str]:
+    """Get a GitHub PR's state via `gh pr view`. Returns OPEN/MERGED/CLOSED or None."""
     try:
         result = subprocess.run(
             ["gh", "pr", "view", pr_url, "--json", "state"],
@@ -514,10 +624,10 @@ def _check_pr_merged(pr_url: str) -> bool:
         )
         if result.returncode == 0:
             data = json.loads(result.stdout)
-            return data.get("state") == "MERGED"
+            return data.get("state")
     except Exception:
         pass
-    return False
+    return None
 
 
 def _sync_tickets_from_sessions(plan, session_mgr) -> bool:
@@ -588,15 +698,38 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
 
     try:
         while True:
+            # 0. Auto-complete sessions whose agent process has finished
+            session_mgr.auto_complete_sessions()
+
             # 1. Sync session status → ticket status
             synced = _sync_tickets_from_sessions(plan, session_mgr)
 
-            # 2. Check for merged PRs
+            # 1b. Discover PR URLs for completed tickets missing them
+            repo_paths = {r.name: r.path for r in arch.repos}
+            for ticket in plan.tickets:
+                if ticket.branch_name and not ticket.pr_url and ticket.status not in (
+                    TicketStatus.PENDING, TicketStatus.FAILED
+                ):
+                    repo_path = repo_paths.get(ticket.repo)
+                    if repo_path:
+                        pr_url = _find_pr_for_branch(ticket.branch_name, repo_path)
+                        if pr_url:
+                            ticket.pr_url = pr_url
+                            ticket.updated_at = datetime.utcnow()
+                            synced = True
+                            console.print(
+                                f"[dim]Discovered PR for {ticket.title}: {pr_url}[/dim]"
+                            )
+
+            # 2. Check for merged/closed PRs
             for ticket in plan.tickets:
                 if ticket.pr_url and ticket.status in (
                     TicketStatus.COMPLETED, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS
                 ):
-                    if _check_pr_merged(ticket.pr_url):
+                    pr_state = _get_pr_state(ticket.pr_url)
+                    if pr_state == "MERGED" or (
+                        pr_state == "CLOSED" and ticket.status == TicketStatus.COMPLETED
+                    ):
                         ticket.status = TicketStatus.MERGED
                         ticket.updated_at = datetime.utcnow()
                         synced = True

@@ -93,7 +93,8 @@ class DockerManager:
             " cp /workspace/.beehive-gitconfig /home/node/.gitconfig 2>/dev/null || true;"
             " gh auth setup-git 2>/dev/null || true;"
             " git config --global url.https://github.com/.insteadOf git@github.com: 2>/dev/null || true;"
-            f" {claude_cmd}"
+            f" {claude_cmd};"
+            " touch /workspace/.beehive-done"
         )
 
         parts.extend([
