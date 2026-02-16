@@ -16,8 +16,8 @@ function App() {
           <ul className="summary-bullets">
             <li><b>Agents</b> run in isolated containers and create a PR for review.</li>
             <li><b>Architects</b> implement complex technical projects, creating a feature branch and presenting a preview environment for review.</li>
-            <li><b>Research scientists</b> run experiments, ablations, profiling and benchmarks for ML projects.</li>
-            <li><b>Autopilot CTO</b> mode creates a roadmap for a broad strategic vision of projects and automates the execution of the roadmap.</li>
+            <li><b>Researchers</b> run experiments, ablations, profiling and benchmarks for ML projects.</li>
+            <li><b>Strategists</b> create a roadmap for a broad strategic vision of projects and automates the execution of the roadmap.</li>
           </ul>
         <p className="buzz-motto">
           Buzz buzz, that’s the sound of your cpus & gpus humming along while you sleep and you live your life
