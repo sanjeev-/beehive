@@ -1,5 +1,46 @@
 import { useState } from 'react'
-import { Highlight, themes } from 'prism-react-renderer'
+import { Highlight } from 'prism-react-renderer'
+
+const beehiveTheme = {
+  plain: {
+    color: '#FFEF70',
+    backgroundColor: '#2A2A2A',
+  },
+  styles: [
+    {
+      types: ['comment', 'prolog', 'doctype', 'cdata'],
+      style: { color: '#6a6a6a', fontStyle: 'italic' as const },
+    },
+    {
+      types: ['punctuation'],
+      style: { color: '#888888' },
+    },
+    {
+      types: ['property', 'tag', 'boolean', 'number', 'constant', 'symbol'],
+      style: { color: '#FFEF70' },
+    },
+    {
+      types: ['selector', 'attr-name', 'string', 'char', 'builtin'],
+      style: { color: '#a8d4a8' },
+    },
+    {
+      types: ['operator', 'entity', 'url'],
+      style: { color: '#888888' },
+    },
+    {
+      types: ['atrule', 'attr-value', 'keyword'],
+      style: { color: '#c9a3ff' },
+    },
+    {
+      types: ['function', 'class-name'],
+      style: { color: '#FFEF70' },
+    },
+    {
+      types: ['regex', 'important', 'variable'],
+      style: { color: '#e8c97a' },
+    },
+  ],
+}
 import './CodeBlock.css'
 
 interface CodeBlockProps {
@@ -73,7 +114,7 @@ export function CodeBlock({ code, language, title }: CodeBlockProps) {
             </svg>
           )}
         </button>
-        <Highlight theme={themes.duotoneDark} code={code} language={language}>
+        <Highlight theme={beehiveTheme} code={code} language={language}>
           {({ className, style, tokens, getLineProps, getTokenProps }) => (
             <pre className={className} style={style}>
               {tokens.map((line, i) => (

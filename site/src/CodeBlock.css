@@ -3,7 +3,7 @@
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid rgba(75, 75, 75, 0.1);
-  background: #272727;
+  background: #2A2A2A;
   transition: border-color 0.2s ease;
 }
 
@@ -13,8 +13,8 @@
 
 .code-block-title {
   padding: 0.75rem 1rem;
-  background: #6060600d;
-  color: #FFEF70;;
+  background: #3737370d;
+  color: #b2b2b2;;
   font-size: 0.875rem;
   font-weight: 600;
   border-bottom: 1px solid rgba(254, 225, 0, 0.1);
