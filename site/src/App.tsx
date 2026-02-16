@@ -25,11 +25,11 @@ function App() {
 
         <section className="content-section">
           <h4>Installation</h4>
-          <p>Install Beehive using Homebrew:</p>
+          <p>The recommended way is via Homebrew:</p>
           <CodeBlock
             code="brew tap sanjeev-/beehive\nbrew install beehive"
             language="bash"
-            title="Install via Homebrew"
+            title="via Homebrew"
           />
         </section>
 
@@ -55,6 +55,12 @@ function App() {
             language="bash"
             title="Watch mode"
           />
+          <p>Terminal UI for monitoring and managing your plan:</p>
+          <CodeBlock
+            code="beehive ui"
+            language="bash"
+            title="Terminal UI"
+          />          
         </section>
       </main>
     </div>
