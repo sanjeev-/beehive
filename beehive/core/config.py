@@ -26,6 +26,14 @@ When you have completed the task:
 These steps are MANDATORY. You must commit, push, create a PR, and merge it before finishing.
 """.strip()
 
+AGENT_FEEDBACK_DELIVERABLE_INSTRUCTIONS = """
+When you have completed addressing the feedback:
+1. git add -A && git commit -m "<descriptive message addressing the feedback>"
+2. git push origin HEAD:{target_branch}
+These steps are MANDATORY. You must commit and push your changes before finishing.
+Do NOT create a new PR. Your changes will appear on the existing PR.
+""".strip()
+
 RESEARCH_DELIVERABLE_INSTRUCTIONS = """
 When you have completed the experiment:
 1. Save all results, logs, and artifacts to the working directory
@@ -71,6 +79,7 @@ class BeehiveConfig:
         include_deliverable: bool = False,
         plan_context: Optional[str] = None,
         auto_merge: bool = False,
+        deliverable_override: Optional[str] = None,
     ) -> str:
         """
         Combine global system prompt with user instructions.
@@ -119,14 +128,17 @@ class BeehiveConfig:
         )
 
         if include_deliverable:
-            template = (
-                AGENT_DELIVERABLE_INSTRUCTIONS_WITH_MERGE
-                if auto_merge
-                else AGENT_DELIVERABLE_INSTRUCTIONS
-            )
-            deliverable = template.format(
-                base_branch=base_branch
-            )
+            if deliverable_override:
+                deliverable = deliverable_override
+            else:
+                template = (
+                    AGENT_DELIVERABLE_INSTRUCTIONS_WITH_MERGE
+                    if auto_merge
+                    else AGENT_DELIVERABLE_INSTRUCTIONS
+                )
+                deliverable = template.format(
+                    base_branch=base_branch
+                )
             parts.append(
                 f"{'='*80}\n"
                 f"DELIVERABLE - Complete these steps when done:\n"

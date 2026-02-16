@@ -854,9 +854,10 @@ class ArchitectsView(Container):
             branch = t.branch_name or "—"
             if len(branch) > 25:
                 branch = branch[:22] + "..."
+            title_display = f"[#8a6dbf]FB[/] {t.title[:27]}" if t.is_feedback else t.title[:30]
             table.add_row(
                 str(t.order) if t.order else "—",
-                t.ticket_id[:8], t.title[:30], t.repo,
+                t.ticket_id[:8], title_display, t.repo,
                 status_display, branch, t.session_id or "—", t.pr_url or "—",
             )
 

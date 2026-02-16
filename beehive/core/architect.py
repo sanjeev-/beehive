@@ -40,6 +40,8 @@ class Ticket(BaseModel):
     session_id: Optional[str] = None  # linked beehive session
     branch_name: Optional[str] = None
     pr_url: Optional[str] = None
+    is_feedback: bool = False  # True for ad-hoc feedback tickets from PR comments
+    source_comment_id: Optional[int] = None  # GitHub comment ID that spawned this
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -56,6 +58,7 @@ class Plan(BaseModel):
     base_branch: Optional[str] = None  # plan's feature branch name
     feature_pr_url: Optional[str] = None  # PR from feature branch → main
     preview_url: Optional[str] = None  # preview env for the feature branch
+    processed_comment_ids: list[int] = []  # GitHub comment IDs already handled
     tickets: list[Ticket] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

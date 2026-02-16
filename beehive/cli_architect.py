@@ -655,6 +655,208 @@ def _sync_tickets_from_sessions(plan, session_mgr) -> bool:
     return synced
 
 
+def _get_pr_comments(pr_url: str) -> list[dict]:
+    """Fetch conversation comments on a GitHub PR via the Issues API.
+
+    Returns list of {id, body, author, created_at} dicts.
+    """
+    # Extract owner/repo/number from URL like https://github.com/owner/repo/pull/123
+    match = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_url)
+    if not match:
+        return []
+    owner, repo, number = match.groups()
+    try:
+        result = subprocess.run(
+            ["gh", "api", f"repos/{owner}/{repo}/issues/{number}/comments",
+             "--jq", '[.[] | {id: .id, body: .body, author: .user.login, created_at: .created_at}]'],
+            capture_output=True, text=True, timeout=15,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return json.loads(result.stdout)
+    except Exception:
+        pass
+    return []
+
+
+def _check_pr_comments(plan, arch, storage, data_dir, session_mgr, tmux, config, docker_mgr) -> bool:
+    """Check all open PRs for new comments and create feedback tickets.
+
+    Returns True if the plan was modified and needs saving.
+    """
+    from beehive.core.architect import Ticket
+
+    changed = False
+
+    # Collect all PR URLs to check: ticket PRs + feature branch PR
+    pr_targets = []  # list of (pr_url, target_branch)
+
+    for ticket in plan.tickets:
+        if ticket.pr_url and ticket.status not in (TicketStatus.MERGED, TicketStatus.FAILED):
+            # Target branch for ticket PRs is the plan's feature branch (or ticket's branch)
+            target = plan.base_branch if plan.base_branch else ticket.branch_name
+            if target:
+                pr_targets.append((ticket.pr_url, target))
+
+    if plan.feature_pr_url:
+        target = plan.base_branch
+        if target:
+            pr_targets.append((plan.feature_pr_url, target))
+
+    processed = set(plan.processed_comment_ids)
+
+    for pr_url, target_branch in pr_targets:
+        comments = _get_pr_comments(pr_url)
+        for comment in comments:
+            comment_id = comment["id"]
+            if comment_id in processed:
+                continue
+            # Skip bot comments and empty
+            body = (comment.get("body") or "").strip()
+            author = comment.get("author", "")
+            if not body or "[bot]" in author or author.endswith("[bot]"):
+                plan.processed_comment_ids.append(comment_id)
+                processed.add(comment_id)
+                changed = True
+                continue
+
+            # Check concurrency: is a feedback agent already in-flight on this branch?
+            in_flight_on_branch = any(
+                t.is_feedback
+                and t.status in (TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS)
+                and t.branch_name == target_branch
+                for t in plan.tickets
+            )
+
+            # Create feedback ticket
+            fb_ticket = Ticket(
+                title=f"Feedback: {body[:60]}",
+                description=(
+                    f"Address the following PR comment feedback:\n\n"
+                    f"**Comment by @{author}:**\n{body}\n\n"
+                    f"**PR:** {pr_url}\n\n"
+                    f"Review the comment and make the requested changes."
+                ),
+                repo=plan.tickets[0].repo if plan.tickets else arch.repos[0].name,
+                is_feedback=True,
+                source_comment_id=comment_id,
+                branch_name=target_branch,
+            )
+
+            plan.tickets.append(fb_ticket)
+            plan.processed_comment_ids.append(comment_id)
+            processed.add(comment_id)
+            changed = True
+
+            if in_flight_on_branch:
+                console.print(
+                    f"[dim]Queued feedback ticket (agent in-flight on {target_branch}): "
+                    f"{fb_ticket.title}[/dim]"
+                )
+            else:
+                console.print(
+                    f"[bold]New PR comment — dispatching feedback agent:[/bold] {fb_ticket.title}"
+                )
+                _assign_feedback_ticket(
+                    fb_ticket, plan, arch, storage, data_dir,
+                    session_mgr, tmux, config, docker_mgr,
+                )
+                changed = True
+
+    return changed
+
+
+def _assign_feedback_ticket(ticket, plan, arch, storage, data_dir,
+                            session_mgr, tmux, config, docker_mgr) -> Optional[str]:
+    """Assign a feedback ticket: create worktree from existing branch, dispatch agent.
+
+    Similar to _assign_single_ticket but pushes to existing branch instead of creating a PR.
+    Returns session_id or None.
+    """
+    from beehive.core.config import AGENT_FEEDBACK_DELIVERABLE_INSTRUCTIONS
+    from beehive.core.git_ops import GitOperations
+    from beehive.core.tmux_manager import TmuxManager
+
+    repo_config = next((r for r in arch.repos if r.name == ticket.repo), None)
+    if not repo_config:
+        console.print(f"[red]Repo '{ticket.repo}' not found in architect config[/red]")
+        return None
+
+    repo_path = Path(repo_config.path)
+    git = GitOperations(repo_path)
+
+    try:
+        target_branch = ticket.branch_name
+        if not target_branch:
+            console.print(f"[red]No target branch for feedback ticket[/red]")
+            return None
+
+        # Build deliverable instructions with target branch
+        deliverable = AGENT_FEEDBACK_DELIVERABLE_INSTRUCTIONS.replace(
+            "{target_branch}", target_branch
+        )
+
+        instructions = config.combine_prompts(
+            ticket.description,
+            base_branch=target_branch,
+            include_deliverable=True,
+            deliverable_override=deliverable,
+        )
+
+        session = session_mgr.create_session(
+            name=ticket.title,
+            instructions=instructions,
+            working_dir=repo_path,
+            base_branch=target_branch,
+        )
+
+        # Use a unique local branch name to avoid git's one-worktree-per-branch limit
+        local_branch = f"{target_branch}-feedback-{session.session_id[:4]}"
+        worktree_path = Path(session.working_directory)
+        git.create_worktree_for_existing_remote_branch(
+            target_branch, local_branch, worktree_path,
+        )
+
+        # Inject CLAUDE.md
+        project_claude_md = None
+        try:
+            project = _find_project_for_architect(arch.architect_id, data_dir)
+            if project:
+                project_storage = ProjectStorage(data_dir)
+                project_claude_md = project_storage.get_project_claude_md(
+                    project.project_id
+                )
+        except Exception:
+            pass
+        config.inject_claude_md(worktree_path, project_claude_md=project_claude_md)
+
+        (worktree_path / ".beehive-system-prompt.txt").write_text(instructions)
+
+        tmux.create_session(
+            session.tmux_session_name,
+            worktree_path,
+            Path(session.log_file),
+            str(worktree_path),
+            None,
+            auto_approve=True,
+        )
+
+        ticket.status = TicketStatus.ASSIGNED
+        ticket.session_id = session.session_id
+        ticket.updated_at = datetime.utcnow()
+        plan.updated_at = datetime.utcnow()
+        storage.save_plan(arch.architect_id, plan)
+
+        console.print(
+            f"[green]✓[/green] Assigned feedback [bold]{ticket.title}[/bold] "
+            f"-> session [cyan]{session.session_id}[/cyan]"
+        )
+        return session.session_id
+
+    except Exception as e:
+        console.print(f"[red]Error assigning feedback '{ticket.title}': {e}[/red]")
+        return None
+
+
 @architect.command("watch")
 @click.argument("architect_id")
 @click.option("--plan", "-p", "plan_id", help="Specific plan ID (defaults to latest)")
@@ -692,6 +894,8 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
     tmux = ctx.obj.get("tmux", TmuxManager())
     config = ctx.obj.get("config", BeehiveConfig(data_dir))
     docker_mgr = ctx.obj.get("docker", DockerManager())
+
+    last_comment_check = 0.0
 
     console.print(f"[bold]Watching plan {plan.plan_id}[/bold] (mode: {plan.execution_mode}, interval: {interval}s)")
     console.print("Press Ctrl+C to stop.\n")
@@ -741,15 +945,48 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
                 plan.updated_at = datetime.utcnow()
                 storage.save_plan(arch.architect_id, plan)
 
+            # 2b. Check for new PR comments and dispatch feedback agents (every 30s)
+            now = time.time()
+            if now - last_comment_check >= 30:
+                last_comment_check = now
+                comment_changed = _check_pr_comments(
+                    plan, arch, storage, data_dir,
+                    session_mgr, tmux, config, docker_mgr,
+                )
+                if comment_changed:
+                    plan.updated_at = datetime.utcnow()
+                    storage.save_plan(arch.architect_id, plan)
+
+            # 2c. Assign queued feedback tickets (one per branch, if no in-flight)
+            for ticket in plan.tickets:
+                if ticket.is_feedback and ticket.status == TicketStatus.PENDING:
+                    in_flight_on_branch = any(
+                        t.is_feedback
+                        and t.status in (TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS)
+                        and t.branch_name == ticket.branch_name
+                        for t in plan.tickets
+                    )
+                    if not in_flight_on_branch:
+                        console.print(
+                            f"[bold]Dispatching queued feedback:[/bold] {ticket.title}"
+                        )
+                        _assign_feedback_ticket(
+                            ticket, plan, arch, storage, data_dir,
+                            session_mgr, tmux, config, docker_mgr,
+                        )
+
             # 3. In sequential mode: auto-assign next ticket if none in-flight
+            #    (exclude feedback tickets from in-flight and pending checks)
             if plan.execution_mode == "sequential":
                 in_flight = [
                     t for t in plan.tickets
-                    if t.status in (TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.COMPLETED)
+                    if not t.is_feedback
+                    and t.status in (TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.COMPLETED)
                 ]
                 if not in_flight:
                     pending = sorted(
-                        [t for t in plan.tickets if t.status == TicketStatus.PENDING],
+                        [t for t in plan.tickets
+                         if not t.is_feedback and t.status == TicketStatus.PENDING],
                         key=lambda t: t.order,
                     )
                     if pending:
@@ -763,9 +1000,10 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
                             True, False,
                         )
 
-            # 4. Check if all tickets are terminal
+            # 4. Check if all non-feedback tickets are terminal
             terminal_statuses = {TicketStatus.MERGED, TicketStatus.FAILED}
-            all_terminal = all(t.status in terminal_statuses for t in plan.tickets)
+            non_feedback = [t for t in plan.tickets if not t.is_feedback]
+            all_terminal = all(t.status in terminal_statuses for t in non_feedback) if non_feedback else False
 
             if all_terminal:
                 if not plan.feature_pr_url:

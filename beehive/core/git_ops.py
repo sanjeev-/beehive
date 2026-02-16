@@ -142,6 +142,17 @@ class GitOperations:
             "worktree", "add", "-b", branch_name, str(worktree_path), base
         )
 
+    def create_worktree_for_existing_remote_branch(
+        self, remote_branch: str, local_branch: str, worktree_path: Path
+    ) -> None:
+        """Create a worktree tracking an existing remote branch under a new local name."""
+        worktree_path = Path(worktree_path).resolve()
+        self._run_git("fetch", "origin", remote_branch, check=False)
+        self._run_git(
+            "worktree", "add", "-b", local_branch,
+            str(worktree_path), f"origin/{remote_branch}",
+        )
+
     def create_worktree_existing_branch(self, branch_name: str, worktree_path: Path) -> None:
         """Create a worktree for an existing branch (no -b flag)."""
         worktree_path = Path(worktree_path).resolve()
