@@ -11,9 +11,14 @@ function App() {
       <main>
         {/* Motto Section */}
         <p className="summary">
-          Beehive is a CLI and terminal UI for building and orchestrating complex technical projects with agents.
-        </p>
-
+          Beehive is an opinionated tool for building and orchestrating complex technical projects with agents.
+          </p>
+          <ul className="summary-bullets">
+            <li>Agents run in isolated containers and create a PR for a ticket (either part of a Plan or ad hoc).</li>
+            <li>Architects create Plans for complex technical projects, a directed graph of tickets that can be executed sequentially or in parallel.  Each plan creates its own feature branch and presents a preview environment for the project.</li>
+            <li>Research scientists run experiments using an repo, log to w&b and is SLURM native</li>
+            <li>Autopilot CTO mode creates a roadmap for a broad strategic vision of projects.</li>
+          </ul>
         <p className="buzz-motto">
           Buzz buzz, that’s the sound of your cpus & gpus humming along while you sleep and you live your life
         </p>

@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    Beehive TUI — Design system
-   Dark theme — #1F1F1F background, #CCCCCC text, #FEE100 accent
+   Dark theme — #1F1F1F background, #CCCCCC text, #FFEF70 accent
    ═══════════════════════════════════════════════════════════════════════════ */
 
 Screen {
@@ -13,7 +13,7 @@ Screen {
     dock: top;
     height: 3;
     background: #1F1F1F;
-    color: #FEE100;
+    color: #FFEF70;
     text-style: bold;
     content-align: left middle;
     padding: 0 3;
@@ -58,7 +58,7 @@ FooterKey .footer-key--description {
 }
 
 #sidebar:focus-within {
-    border-right: solid #FEE100;
+    border-right: solid #FFEF70;
 }
 
 #sidebar-title {
@@ -81,9 +81,9 @@ NavItem:hover {
 
 NavItem.active {
     background: #2A2A2A;
-    color: #FEE100;
+    color: #FFEF70;
     text-style: bold;
-    border-left: tall #FEE100;
+    border-left: thick #FFEF70;
 }
 
 /* ─── Main content area ───────────────────────────────────────────────────── */
@@ -337,7 +337,7 @@ CreateResearcherModal, EditResearcherModal, EditExperimentModal {
     width: 70;
     max-height: 85%;
     background: #262626;
-    border: round #FEE100;
+    border: round #FFEF70;
     padding: 2 3;
     overflow-y: auto;
 }

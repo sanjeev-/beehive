@@ -228,7 +228,7 @@ class BeehiveHeader(Static):
     """Top bar — dark strip with bee-yellow logo."""
 
     def render(self):
-        return "  [bold #FEE100]bh[/] \U0001f41d"
+        return "  [bold #FFEF70]bh[/] \U0001f41d"
 
 
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
@@ -406,7 +406,7 @@ class HomeView(Container):
         activities = []
         for s in sessions:
             verb = {
-                "running": "[#FEE100]started[/]",
+                "running": "[#FFEF70]started[/]",
                 "completed": "[#5a8a5a]completed[/]",
                 "failed": "[#b84040]failed[/]",
                 "stopped": "[#888888]stopped[/]",
@@ -874,12 +874,12 @@ class ArchitectsView(Container):
         terminal_statuses = {TicketStatus.MERGED, "merged", TicketStatus.FAILED, "failed"}
         all_terminal = all(str(t.status) in ("merged", "failed") for t in p.tickets) if p.tickets else False
         if all_terminal and not p.feature_pr_url:
-            detail += "\n\n[#FEE100]All tickets terminal — run watch to create feature PR[/]"
+            detail += "\n\n[#FFEF70]All tickets terminal — run watch to create feature PR[/]"
         elif all_terminal and p.feature_pr_url:
             detail += "\n\n[#5a8a5a]Feature PR created — waiting for merge[/]"
 
         if self._can_assign_next():
-            detail += "\n\n[#FEE100]Ready to assign next ticket (a)[/]"
+            detail += "\n\n[#FFEF70]Ready to assign next ticket (a)[/]"
         self.query_one("#arch-detail-content", Static).update(detail)
 
     def _can_assign_next(self) -> bool:
@@ -1166,9 +1166,9 @@ class ResearchersView(Container):
         self._set_columns(table, "experiments", ("Id", "Title", "Repo", "Status", "Session", "Output"))
         for e in s.experiments:
             status_display = {
-                "pending": "[#FEE100]pending[/]",
+                "pending": "[#FFEF70]pending[/]",
                 "assigned": "[#5577bb]assigned[/]",
-                "in_progress": "[#FEE100]in progress[/]",
+                "in_progress": "[#FFEF70]in progress[/]",
                 "completed": "[#5a8a5a]completed[/]",
                 "failed": "[#b84040]failed[/]",
             }.get(str(e.status), str(e.status))
@@ -1401,7 +1401,7 @@ class AgentsView(Container):
                 table.clear()
             for s in self._sessions:
                 status_display = {
-                    "running": "[#FEE100]running[/]",
+                    "running": "[#FFEF70]running[/]",
                     "completed": "[#5a8a5a]completed[/]",
                     "failed": "[#b84040]failed[/]",
                     "stopped": "[#888888]stopped[/]",
@@ -1438,7 +1438,7 @@ class AgentsView(Container):
             return
         s = self._sessions[idx]
         status_color = {
-            "running": "#FEE100",
+            "running": "#FFEF70",
             "completed": "#5a8a5a",
             "failed": "#b84040",
             "stopped": "#888888",

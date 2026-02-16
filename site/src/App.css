@@ -23,6 +23,8 @@ body {
   margin-bottom: 40px;
 }
 
+
+
 /* Summary: White, Bold */
 .summary {
   color: #dbdbdb;
@@ -31,12 +33,23 @@ body {
   line-height: 1.4;
 }
 
+.summary-bullets {
+  list-style-type: disc;
+  margin-left: 20px;
+  margin-bottom: 20px;
+  line-height: 1.4;
+  color: #dbdbdb;
+  font-size: 0.9rem;
+}
+
 .buzz-motto {
-  color: #bcbcbc;
+  color: #9f9f9f;
   font-size: 0.9rem;
   margin-bottom: 20px;
   line-height: 1.4;
 }
+
+
 
 /* Headers: Yellow Color */
 h4 {
