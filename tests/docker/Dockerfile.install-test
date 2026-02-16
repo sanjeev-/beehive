@@ -1,0 +1,25 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only the bare minimum — the installer should handle everything else
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        sudo && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create non-root test user with passwordless sudo
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Copy the installer script
+COPY install.sh /home/testuser/install.sh
+RUN chown testuser:testuser /home/testuser/install.sh && \
+    chmod +x /home/testuser/install.sh
+
+USER testuser
+WORKDIR /home/testuser
+
+CMD ["bash", "install.sh", "--ci"]
