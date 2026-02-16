@@ -2,19 +2,21 @@
 PLAN CONTEXT - Your task is part of an ordered plan:
 ================================================================================
 
-Plan: Create a GitHub Actions release workflow that triggers on version tags (v*), builds the Python package, and creates a GitHub release with the artifacts. Also add a Makefile release target that prompts for a version tag and pushes it. Test the workflow by creating a v0.1.0 tag.
+Plan: Build a simple static landing page for Beehive in a new site/ directory. Vite + React + TypeScript. Single page with: "bh" logo (bee-yellow #FEE100) in top-left corner, dark background, center-aligned content explaining how to install and use beehive. Code blocks with click-to-copy (navigator.clipboard API) showing: brew install, basic CLI commands (session create, architect plan, architect watch). Use prism-react-renderer for syntax highlighting. Add a GitHub Actions workflow (.github/workflows/deploy-site.yaml) that builds the site and deploys via aws s3 sync to an S3 bucket, following the same pattern as the fabric project. The workflow should use workflow_dispatch trigger, AWS credentials from secrets, and us-east-1 region. Do NOT create actual AWS infrastructure — instead document the required infra setup (S3 bucket with static hosting, bucket policy, optional CloudFront) in the PR description.
 Execution mode: sequential
-Total tickets: 3
+Total tickets: 4
 
-COMPLETED BEFORE YOUR TASK:
-  #1. [completed] Add GitHub Actions release workflow
-     Create .github/workflows/release.yml that triggers on version tags matching 'v*' pattern. The workflow should: checkout code, set up Python, install dependencies, build the Python package using standard tools (pip wheel), run tests to ensure quality, create a GitHub release using the tag name, and upload the built artifacts (wheel and source distribution) to the release. Include proper error handling and use official GitHub actions where possible.
-
->>> YOUR TASK (#2): Add Makefile release target
+>>> YOUR TASK (#1): Create Vite + React + TypeScript project structure in site/ directory
 
 PLANNED AFTER YOUR TASK:
-  #3. Test release workflow with v0.1.0 tag
-     Test the complete release process by creating a v0.1.0 tag. First ensure the package builds correctly and all tests pass. Use the new Makefile release target to create and push the v0.1.0 tag. Verify that the GitHub Actions workflow triggers correctly, builds the package, and creates a release with artifacts. Document any issues found and verify the release artifacts are downloadable and installable.
+  #2. Build single-page landing site with dark theme and bh logo
+     Implement the main landing page in src/App.tsx with: dark background (#1a1a1a or similar), clean typography, "bh" logo in top-left corner using bee-yellow color #FEE100. Center-aligned content area with heading "Beehive" and brief description of the tool. Implement responsive design that works on both desktop and mobile. Style with CSS modules or styled-components, keeping the design minimal and clean.
+
+  #3. Add installation and usage code blocks with click-to-copy
+     Create code block components using prism-react-renderer for syntax highlighting. Implement click-to-copy functionality using navigator.clipboard.writeText() API with small copy icons/buttons. Add code blocks showing: 1) Homebrew installation (brew tap sanjeev-/beehive && brew install beehive), 2) Basic CLI usage (beehive session create, beehive architect plan, beehive architect watch). Each code block should have hover states and visual feedback when copied. Handle clipboard API errors gracefully with fallback.
+
+  #4. Add GitHub Actions workflow for S3 deployment
+     Create .github/workflows/deploy-site.yaml following the fabric project pattern. Workflow should: trigger on workflow_dispatch (manual), run on ubuntu-latest, use Node.js 18, cd into site/ directory, run npm ci && npm run build, deploy using aws s3 sync ./dist s3://${BEEHIVE_SITE_BUCKET} --delete. Use AWS credentials from GitHub secrets (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) and us-east-1 region. Include comprehensive PR description documenting required AWS infrastructure: S3 bucket with static website hosting enabled, public read bucket policy, optional CloudFront distribution setup.
 
 IMPORTANT: Focus ONLY on your task. Do not implement work that belongs to previous or future tickets. Keep your scope limited to exactly what your task describes.
 
@@ -22,7 +24,7 @@ IMPORTANT: Focus ONLY on your task. Do not implement work that belongs to previo
 TASK INSTRUCTIONS:
 ================================================================================
 
-Create a Makefile with a 'release' target that: prompts the user to enter a version number, validates the version format (semantic versioning), creates and pushes a git tag with 'v' prefix (e.g., v1.0.0), and provides clear feedback to the user. Include a 'help' target that documents available commands. Ensure the Makefile works on both macOS and Linux systems.
+Set up a new Vite + React + TypeScript project in the site/ subdirectory. Create package.json with dependencies: react, react-dom, @types/react, @types/react-dom, vite, @vitejs/plugin-react, typescript, prism-react-renderer. Set up vite.config.ts, tsconfig.json, and src/ directory structure with index.html, main.tsx, App.tsx, and App.css. Configure build output to dist/ directory. The project should be completely self-contained within the site/ directory.
 
 ================================================================================
 DELIVERABLE - Complete these steps when done:
@@ -31,7 +33,7 @@ DELIVERABLE - Complete these steps when done:
 When you have completed the task:
 1. git add -A && git commit -m "<descriptive message>"
 2. git push -u origin HEAD
-3. gh pr create --fill --base plan/create-a-github-actions-release-workflow-that-trig-65acc1cb
+3. gh pr create --fill --base plan/build-a-simple-static-landing-page-for-beehive-in--622bb49c
 4. gh pr merge --squash
 5. Print the PR URL as the last line of output
 These steps are MANDATORY. You must commit, push, create a PR, and merge it before finishing.
