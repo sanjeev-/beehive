@@ -1,0 +1,43 @@
+principles: |
+  This architect builds a simple static site for Beehive and sets up S3 deployment.
+
+  The site lives in a new site/ directory within the beehive repo.
+  Tech stack: TypeScript, React (Create React App or Vite), minimal dependencies.
+
+  Design:
+  - Simple, single-page site. Dark background, clean typography.
+  - "bh" logo in the top-left corner (matching the TUI's bee-yellow #FEE100 accent).
+  - Center-aligned content showing how to use beehive in a simple, effective way.
+  - Generous code blocks with click-to-copy functionality.
+  - Show how to install via Homebrew:
+      brew tap sanjeev-/beehive
+      brew install beehive
+  - Show basic usage commands (beehive session, beehive architect, etc.)
+  - That's it — extremely simple landing page. No routing, no navbar, no footer clutter.
+
+  Deployment:
+  - GitHub Actions workflow (same pattern as bitbook/fabric):
+    - Trigger: workflow_dispatch (manual)
+    - Build: npm ci && npm run build
+    - Deploy: aws s3 sync ./build s3://${BEEHIVE_SITE_BUCKET} --delete
+    - AWS credentials from GitHub secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+    - Region: us-east-1
+  - Do NOT create the actual S3 bucket or CloudFront distribution.
+  - Instead, include clear instructions in the PR description for what infra changes
+    the user needs to make (create S3 bucket with static website hosting enabled,
+    optional CloudFront distribution, bucket policy for public read).
+
+  Principles:
+  - Keep it dead simple. One page, no dependencies beyond React and a syntax highlighter.
+  - Use a lightweight syntax highlighting library (e.g., prism-react-renderer or highlight.js)
+    for the code blocks.
+  - Click-to-copy: use navigator.clipboard.writeText() with a small copy icon/button on each block.
+  - Responsive: should look good on mobile too, but desktop-first.
+  - The site/ directory should be self-contained with its own package.json, tsconfig, etc.
+  - Use Vite + React (faster, simpler than CRA) unless there's a reason not to.
+
+repos:
+  - name: beehive
+    path: /Users/sanjeev/Documents/beehive
+    base_branch: main
+    description: Beehive CLI tool repo — the static site lives in site/ subdirectory
