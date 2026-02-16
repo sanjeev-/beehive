@@ -11,7 +11,7 @@ function App() {
       <main className="main-content">
         <div className="content-container">
           <section className="installation-section">
-            <h2>Installation</h2>
+            <h4>Installation</h4>
             <p>Install Beehive using Homebrew:</p>
             <CodeBlock
               code="brew tap sanjeev-/beehive\nbrew install beehive"
@@ -21,7 +21,7 @@ function App() {
           </section>
 
           <section className="usage-section">
-            <h2>Getting Started</h2>
+            <h4>Getting Started</h4>
             <p>Create a new development session:</p>
             <CodeBlock
               code="beehive session create"
