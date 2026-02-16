@@ -930,7 +930,15 @@ def _create_feature_pr_and_preview(plan, arch, storage, data_dir: Path) -> None:
                 plan.feature_pr_url = pr_url
                 console.print(f"\n[green bold]Feature branch PR created:[/green bold] {pr_url}")
             else:
-                console.print(f"[yellow]Warning: PR creation failed: {result.stderr.strip()}[/yellow]")
+                stderr = result.stderr.strip()
+                # If PR already exists, extract the URL from the error message
+                import re
+                existing_url = re.search(r'(https://github\.com/[^\s]+/pull/\d+)', stderr)
+                if existing_url:
+                    plan.feature_pr_url = existing_url.group(1)
+                    console.print(f"\n[green]Feature branch PR already exists:[/green] {plan.feature_pr_url}")
+                else:
+                    console.print(f"[yellow]Warning: PR creation failed: {stderr}[/yellow]")
         except Exception as e:
             console.print(f"[yellow]Warning: PR creation failed: {e}[/yellow]")
 
