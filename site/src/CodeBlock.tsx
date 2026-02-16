@@ -49,7 +49,7 @@ interface CodeBlockProps {
   title?: string
 }
 
-export function CodeBlock({ code, language, title }: CodeBlockProps) {
+export function CodeBlock({ code, language }: CodeBlockProps) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -78,7 +78,6 @@ export function CodeBlock({ code, language, title }: CodeBlockProps) {
 
   return (
     <div className="code-block">
-      {title && <div className="code-block-title">{title}</div>}
       <div className="code-block-container">
         <button
           className={`copy-button ${copied ? 'copied' : ''}`}

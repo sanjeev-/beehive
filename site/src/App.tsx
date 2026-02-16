@@ -29,7 +29,6 @@ function App() {
           <CodeBlock
             code="brew tap sanjeev-/beehive\nbrew install beehive"
             language="bash"
-            title="via Homebrew"
           />
         </section>
 
@@ -39,27 +38,23 @@ function App() {
           <CodeBlock
             code="beehive session create"
             language="bash"
-            title="Create a session"
           />
 
           <p>Plan your implementation with AI assistance:</p>
           <CodeBlock
             code="beehive architect plan"
             language="bash"
-            title="Create a plan"
           />
 
           <p>Watch and implement your plan in real-time:</p>
           <CodeBlock
             code="beehive architect watch"
             language="bash"
-            title="Watch mode"
           />
           <p>Terminal UI for monitoring and managing your plan:</p>
           <CodeBlock
             code="beehive ui"
             language="bash"
-            title="Terminal UI"
           />          
         </section>
       </main>
