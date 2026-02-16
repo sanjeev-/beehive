@@ -73,7 +73,7 @@ export function CodeBlock({ code, language, title }: CodeBlockProps) {
             </svg>
           )}
         </button>
-        <Highlight theme={themes.nightOwl} code={code} language={language}>
+        <Highlight theme={themes.duotoneDark} code={code} language={language}>
           {({ className, style, tokens, getLineProps, getTokenProps }) => (
             <pre className={className} style={style}>
               {tokens.map((line, i) => (
