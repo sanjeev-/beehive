@@ -263,17 +263,18 @@ BANNER
 }
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  STEP 1: Python 3.9+
+#  STEP 1: Python 3.10+
 # ═════════════════════════════════════════════════════════════════════════════
 step_python() {
-    step_header 1 "Python 3.9+"
+    step_header 1 "Python 3.10+"
 
+    # Search common Python binary names, preferring newer versions
     local python_cmd=""
-    for cmd in python3 python; do
+    for cmd in python3.13 python3.12 python3.11 python3.10 python3 python; do
         if command -v "$cmd" &>/dev/null; then
             local ver
             ver=$("$cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-            if [[ -n "$ver" ]] && version_gte "$ver" "3.9"; then
+            if [[ -n "$ver" ]] && version_gte "$ver" "3.10"; then
                 python_cmd="$cmd"
                 success "Found $cmd $ver"
                 break
@@ -282,7 +283,7 @@ step_python() {
     done
 
     if [[ -z "$python_cmd" ]]; then
-        info "  Python 3.9+ not found. Installing..."
+        info "  Python 3.10+ not found. Installing..."
         case "$PKG_MGR" in
             brew)   pkg_install python@3 ;;
             apt)
@@ -293,11 +294,11 @@ step_python() {
             pacman)  pkg_install python ;;
         esac
 
-        for cmd in python3 python; do
+        for cmd in python3.13 python3.12 python3.11 python3.10 python3 python; do
             if command -v "$cmd" &>/dev/null; then
                 local ver
                 ver=$("$cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-                if [[ -n "$ver" ]] && version_gte "$ver" "3.9"; then
+                if [[ -n "$ver" ]] && version_gte "$ver" "3.10"; then
                     python_cmd="$cmd"
                     break
                 fi
@@ -305,7 +306,7 @@ step_python() {
         done
 
         if [[ -z "$python_cmd" ]]; then
-            fail "Could not install Python 3.9+."
+            fail "Could not install Python 3.10+."
             exit 1
         fi
         success "Installed $python_cmd $("$python_cmd" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
@@ -691,9 +692,20 @@ step_install_beehive() {
     mkdir -p "$BEEHIVE_HOME"
     mkdir -p "$BEEHIVE_BIN"
 
-    # Create or update the dedicated venv
+    # Create or recreate the dedicated venv
     if [[ -d "$BEEHIVE_VENV" ]]; then
-        detail "Updating existing venv at $BEEHIVE_VENV..."
+        # Check if existing venv has the right Python version
+        local venv_ver=""
+        if [[ -f "$BEEHIVE_VENV/bin/python3" ]]; then
+            venv_ver=$("$BEEHIVE_VENV/bin/python3" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) || true
+        fi
+        if [[ -n "$venv_ver" ]] && version_gte "$venv_ver" "3.10"; then
+            detail "Updating existing venv at $BEEHIVE_VENV (Python $venv_ver)..."
+        else
+            detail "Recreating venv (was Python ${venv_ver:-unknown}, need 3.10+)..."
+            rm -rf "$BEEHIVE_VENV"
+            "$PYTHON_CMD" -m venv "$BEEHIVE_VENV"
+        fi
     else
         detail "Creating venv at $BEEHIVE_VENV..."
         "$PYTHON_CMD" -m venv "$BEEHIVE_VENV"
