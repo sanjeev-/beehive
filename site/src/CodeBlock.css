@@ -1,0 +1,89 @@
+.code-block {
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(254, 225, 0, 0.1);
+  background: #011627;
+  transition: border-color 0.2s ease;
+}
+
+.code-block:hover {
+  border-color: rgba(254, 225, 0, 0.3);
+}
+
+.code-block-title {
+  padding: 0.75rem 1rem;
+  background: rgba(254, 225, 0, 0.05);
+  color: #FEE100;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(254, 225, 0, 0.1);
+}
+
+.code-block-container {
+  position: relative;
+  overflow-x: auto;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 1rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-x: auto;
+}
+
+.copy-button {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.copy-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.copy-button:active {
+  transform: translateY(0);
+}
+
+.copy-button.copied {
+  background: rgba(254, 225, 0, 0.2);
+  border-color: #FEE100;
+  color: #FEE100;
+}
+
+.copy-button svg {
+  display: block;
+}
+
+/* Ensure code doesn't overlap with copy button */
+.code-block-container pre {
+  padding-right: 4rem;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .code-block pre {
+    font-size: 0.8rem;
+  }
+
+  .copy-button {
+    padding: 0.4rem;
+  }
+}
