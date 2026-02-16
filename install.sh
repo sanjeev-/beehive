@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Beehive Universal Installer
 # Works on macOS and Linux (Debian/Ubuntu, Fedora, Arch)
@@ -8,7 +6,12 @@ set -euo pipefail
 #   curl -fsSL https://openclaw.ai/install.sh | bash
 #   bash install.sh
 #   bash install.sh --ci
+#
+# The entire script is wrapped in { ... } so that bash reads the full file
+# before executing anything — critical for `curl | bash` to work correctly.
 # ─────────────────────────────────────────────────────────────────────────────
+{
+set -euo pipefail
 
 BEEHIVE_VERSION="latest"
 BEEHIVE_REPO="https://github.com/sanjeev-/beehive.git"
@@ -26,23 +29,6 @@ YELLOW='\033[38;2;255;239;112m'
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 RESET='\033[0m'
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Piped stdin handling
-# When run via `curl | bash`, stdin is the pipe (containing the script), not
-# the terminal. Detect this and re-execute from a temp file so interactive
-# prompts work. We distinguish `curl | bash` (BASH_SOURCE is empty/"bash")
-# from `bash install.sh` in a non-tty env (BASH_SOURCE is a real file).
-# ─────────────────────────────────────────────────────────────────────────────
-if [ ! -t 0 ]; then
-    _SCRIPT_PATH="${BASH_SOURCE[0]:-}"
-    if [ -z "$_SCRIPT_PATH" ] || [ ! -f "$_SCRIPT_PATH" ]; then
-        TMPSCRIPT=$(mktemp)
-        cat > "$TMPSCRIPT"
-        exec bash "$TMPSCRIPT" "$@"
-    fi
-    unset _SCRIPT_PATH
-fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CI / Non-interactive mode
@@ -94,7 +80,7 @@ ask_yes_no() {
 
     while true; do
         printf "${WHITE}  %s %s ${RESET}" "$prompt" "$yn_hint"
-        read -r answer
+        read -r answer < /dev/tty
         answer="${answer:-$default}"
         case "$answer" in
             [Yy]*) return 0 ;;
@@ -113,7 +99,7 @@ ask_input() {
     fi
 
     printf "${WHITE}  %s: ${RESET}" "$prompt"
-    read -r "$var_name"
+    read -r "$var_name" < /dev/tty
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -616,7 +602,7 @@ step_api_key() {
     # Interactive: prompt for key
     while true; do
         printf "${WHITE}  Enter your Anthropic API key: ${RESET}"
-        read -rs api_key
+        read -rs api_key < /dev/tty
         printf "\n"
 
         if [[ -z "$api_key" ]]; then
@@ -836,3 +822,5 @@ main() {
 }
 
 main "$@"
+exit
+}
