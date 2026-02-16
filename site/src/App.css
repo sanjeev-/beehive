@@ -23,13 +23,18 @@ body {
   margin-bottom: 40px;
 }
 
-/* Motto: White, Bold, Italic */
+/* Summary: White, Bold */
+.summary {
+  color: #dbdbdb;
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+  line-height: 1.4;
+}
+
 .buzz-motto {
-  color: #ffffff;
-  font-weight: bold;
-  font-style: italic;
+  color: #bcbcbc;
   font-size: 0.9rem;
-  margin-bottom: 50px;
+  margin-bottom: 20px;
   line-height: 1.4;
 }
 
@@ -43,7 +48,7 @@ h4 {
 
 /* Small, very light gray text */
 p {
-  color: #999999;
+  color: #dbdbdb;
   font-size: 0.9rem;
   margin-bottom: 15px;
 }

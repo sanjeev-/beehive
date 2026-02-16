@@ -10,6 +10,10 @@ function App() {
 
       <main>
         {/* Motto Section */}
+        <p className="summary">
+          Beehive is an AI-powered development tool that helps you build better software faster.
+        </p>
+
         <p className="buzz-motto">
           Buzz buzz, that’s the sound of your cpus & gpus humming along while you sleep and you live your life
         </p>
