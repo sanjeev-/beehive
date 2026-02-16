@@ -8,8 +8,11 @@ function App() {
         <div className="logo">bh</div>
       </header>
 
-      <main className="main-content">
+      <main className="usage-section">
         <div className="content-container">
+        <section className="buzz-section">
+          <p>Buzz buzz, that’s the sound of your cpus & gpus humming along while you sleep and you live your life</p>
+        </section>
           <section className="installation-section">
             <h4>Installation</h4>
             <p>Install Beehive using Homebrew:</p>
