@@ -40,18 +40,29 @@ def list_architects(ctx):
         console.print("[dim]No architects found.[/dim]")
         return
 
+    # Build architect_id → project_name map
+    data_dir = ctx.obj.get("data_dir", Path.home() / ".beehive")
+    project_storage = ProjectStorage(data_dir)
+    arch_to_project = {}
+    for proj in project_storage.load_all_projects():
+        for aid in proj.architect_ids:
+            arch_to_project[aid] = proj.name
+
     table = Table(title="Architects")
     table.add_column("ID", style="cyan")
     table.add_column("Name")
+    table.add_column("Project")
     table.add_column("Repos")
     table.add_column("Plans")
     table.add_column("Created")
 
     for a in architects:
         repo_names = ", ".join(r.name for r in a.repos)
+        project_name = arch_to_project.get(a.architect_id)
         table.add_row(
             a.architect_id,
             a.name,
+            project_name if project_name else "[dim]—[/dim]",
             repo_names,
             str(len(a.plans)),
             a.created_at.strftime("%Y-%m-%d %H:%M"),
@@ -70,10 +81,24 @@ def list_architects(ctx):
     type=click.Path(exists=True, path_type=Path),
     help="YAML config file for the architect",
 )
+@click.option(
+    "--project",
+    "-p",
+    required=True,
+    help="Project ID to link this architect to",
+)
 @click.pass_context
-def create_architect(ctx, name: str, config_file: Path):
+def create_architect(ctx, name: str, config_file: Path, project: str):
     """Create a new architect from a YAML config file."""
     storage = ctx.obj["architect_storage"]
+    data_dir = ctx.obj.get("data_dir", Path.home() / ".beehive")
+
+    # Validate project exists
+    project_storage = ProjectStorage(data_dir)
+    proj = project_storage.load_project(project)
+    if not proj:
+        console.print(f"[red]Error: Project '{project}' not found.[/red]")
+        sys.exit(1)
 
     # Parse YAML
     with open(config_file) as f:
@@ -107,8 +132,13 @@ def create_architect(ctx, name: str, config_file: Path):
 
     storage.save_architect(arch)
 
+    # Link architect to project
+    proj.architect_ids.append(arch.architect_id)
+    project_storage.save_project(proj)
+
     console.print(f"[green]✓[/green] Created architect: [bold]{arch.name}[/bold]")
     console.print(f"  ID: [cyan]{arch.architect_id}[/cyan]")
+    console.print(f"  Project: [cyan]{proj.name}[/cyan]")
     console.print(f"  Repos: {', '.join(r.name for r in repos)}")
 
 
