@@ -399,6 +399,18 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
                 f"[user]\n\tname = {git_name}\n\temail = {git_email}\n"
             )
 
+        # Detect project preview config early so we can expose ports in Docker
+        preview_project = None
+        preview_port = None
+        try:
+            preview_project = _find_project_for_architect(arch.architect_id, data_dir)
+            if preview_project and preview_project.preview and use_docker:
+                from beehive.core.preview import PreviewManager
+                preview_mgr = PreviewManager(data_dir)
+                preview_port = preview_mgr._allocate_port(preview_mgr._load_states())
+        except Exception:
+            pass
+
         docker_command = None
         if use_docker:
             if not docker_mgr.ensure_image():
@@ -415,8 +427,10 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
                     has_initial_prompt=False,
                     auto_approve=auto_approve,
                 )
+                exposed_ports = [preview_port] if preview_port else None
                 docker_command = docker_mgr.build_run_command(
-                    session.session_id, worktree_path, claude_cmd
+                    session.session_id, worktree_path, claude_cmd,
+                    exposed_ports=exposed_ports,
                 )
 
         tmux.create_session(
@@ -436,9 +450,9 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
         plan.updated_at = datetime.utcnow()
         storage.save_plan(arch.architect_id, plan)
 
+        # Start preview environment on the host
         try:
-            project = _find_project_for_architect(arch.architect_id, data_dir)
-            if project and project.preview:
+            if preview_project and preview_project.preview:
                 from beehive.core.preview import PreviewManager
 
                 preview_mgr = PreviewManager(data_dir)
@@ -446,10 +460,10 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
                     session_id=session.session_id,
                     task_name=ticket.title,
                     working_directory=str(worktree_path),
-                    setup_command=project.preview.setup_command,
-                    teardown_command=project.preview.teardown_command,
-                    url_template=project.preview.url_template,
-                    startup_timeout=project.preview.startup_timeout,
+                    setup_command=preview_project.preview.setup_command,
+                    teardown_command=preview_project.preview.teardown_command,
+                    url_template=preview_project.preview.url_template,
+                    startup_timeout=preview_project.preview.startup_timeout,
                 )
                 session_mgr.update_session(session.session_id, preview_url=preview_url)
                 console.print(f"  Preview: [cyan]{preview_url}[/cyan]")

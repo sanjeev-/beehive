@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 
 class DockerManager:
@@ -58,11 +59,14 @@ class DockerManager:
         session_id: str,
         worktree_path: Path,
         claude_cmd: str,
+        exposed_ports: Optional[list[int]] = None,
     ) -> str:
         """Build the full `docker run` command string.
 
         The claude_cmd should use $(cat ...) references to read prompts
         from files in /workspace, keeping it short and quoting-safe.
+        exposed_ports: list of host ports to forward into the container
+        (each maps host:container with the same port number).
         """
         home = Path.home()
         parts = [
@@ -73,6 +77,10 @@ class DockerManager:
             "-e GH_TOKEN",
             f"-v {worktree_path}:/workspace",
         ]
+
+        # Port forwarding
+        for port in (exposed_ports or []):
+            parts.append(f"-p {port}:{port}")
 
         # Conditionally mount host configs (read-only)
         optional_mounts = [

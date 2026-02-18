@@ -118,8 +118,10 @@ class PreviewManager:
             url = url_template.format(task_name=sanitized_name, port=port)
 
             # Set up environment
+            backend_port = port + 1000
             env = os.environ.copy()
             env["BEEHIVE_PORT"] = str(port)
+            env["BEEHIVE_BACKEND_PORT"] = str(backend_port)
             env["BEEHIVE_TASK_NAME"] = sanitized_name
             env["BEEHIVE_SESSION_ID"] = session_id
 

@@ -15,6 +15,7 @@ from beehive.core.session import SessionManager, SessionStatus
 from beehive.core.tmux_manager import TmuxManager
 from beehive.core.config import BeehiveConfig
 from beehive.core.docker_manager import DockerManager
+from beehive.core.project_storage import ProjectStorage
 from beehive.cli_architect import architect
 from beehive.cli_project import project, cto
 from beehive.cli_researcher import researcher
@@ -174,6 +175,23 @@ def create(
                     f"[user]\n\tname = {git_name}\n\temail = {git_email}\n"
                 )
 
+            # Detect project preview config for port forwarding
+            preview_project = None
+            preview_port = None
+            try:
+                data_dir = ctx.obj["data_dir"]
+                project_storage = ProjectStorage(data_dir)
+                for proj in project_storage.load_all_projects():
+                    if any(str(working_dir).startswith(r.path) for r in proj.repos):
+                        preview_project = proj
+                        break
+                if preview_project and preview_project.preview and use_docker:
+                    from beehive.core.preview import PreviewManager
+                    preview_mgr = PreviewManager(data_dir)
+                    preview_port = preview_mgr._allocate_port(preview_mgr._load_states())
+            except Exception:
+                pass
+
             # Build docker command if using Docker
             docker_command = None
             if use_docker:
@@ -191,8 +209,10 @@ def create(
                         has_initial_prompt=bool(prompt),
                         auto_approve=auto_approve,
                     )
+                    exposed_ports = [preview_port] if preview_port else None
                     docker_command = docker_mgr.build_run_command(
-                        session.session_id, worktree_path, claude_cmd
+                        session.session_id, worktree_path, claude_cmd,
+                        exposed_ports=exposed_ports,
                     )
 
             # Start tmux session in the worktree directory
@@ -205,6 +225,26 @@ def create(
                 auto_approve=auto_approve,
                 docker_command=docker_command,
             )
+
+            # Start preview environment on the host if project has preview config
+            if preview_project and preview_project.preview:
+                try:
+                    from beehive.core.preview import PreviewManager
+                    data_dir = ctx.obj["data_dir"]
+                    preview_mgr = PreviewManager(data_dir)
+                    preview_url = preview_mgr.start_preview(
+                        session_id=session.session_id,
+                        task_name=name,
+                        working_directory=str(worktree_path),
+                        setup_command=preview_project.preview.setup_command,
+                        teardown_command=preview_project.preview.teardown_command,
+                        url_template=preview_project.preview.url_template,
+                        startup_timeout=preview_project.preview.startup_timeout,
+                    )
+                    session_mgr.update_session(session.session_id, preview_url=preview_url)
+                    console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
+                except Exception as e:
+                    console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
 
         runtime_label = "[magenta]Docker[/magenta]" if use_docker else "[dim]Host[/dim]"
         console.print(f"[green]✓[/green] Created session: [bold]{session.name}[/bold]")
