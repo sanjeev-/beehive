@@ -201,6 +201,75 @@ class PreviewManager:
             self._save_states(remaining, f)
             return True
 
+    def restart_preview(self, session_id: str) -> Optional[str]:
+        """Stop and restart a preview, keeping the same port. Returns new URL or None."""
+        with self._lock_file(self.state_file) as f:
+            f.seek(0)
+            content = f.read()
+            states = [
+                PreviewState(**s)
+                for s in (json.loads(content) if content.strip() else [])
+            ]
+
+            target = None
+            for s in states:
+                if s.session_id == session_id:
+                    target = s
+                    break
+
+            if not target:
+                return None
+
+            # Run teardown command
+            if target.teardown_command:
+                try:
+                    subprocess.run(
+                        target.teardown_command,
+                        shell=True,
+                        cwd=target.working_directory,
+                        timeout=10,
+                        capture_output=True,
+                    )
+                except Exception:
+                    pass
+
+            # Kill the process group
+            if self._is_process_alive(target.pid):
+                try:
+                    os.killpg(os.getpgid(target.pid), signal.SIGTERM)
+                except OSError:
+                    try:
+                        os.kill(target.pid, signal.SIGKILL)
+                    except OSError:
+                        pass
+
+            # Re-launch with the same port and env
+            backend_port = target.port + 1000
+            env = os.environ.copy()
+            env["BEEHIVE_PORT"] = str(target.port)
+            env["BEEHIVE_BACKEND_PORT"] = str(backend_port)
+            env["BEEHIVE_TASK_NAME"] = self.sanitize_task_name(session_id)
+            env["BEEHIVE_SESSION_ID"] = session_id
+
+            log_file = self.logs_dir / f"preview-{session_id}.log"
+            log_fh = open(log_file, "a")
+
+            proc = subprocess.Popen(
+                target.setup_command,
+                shell=True,
+                cwd=target.working_directory,
+                env=env,
+                stdout=log_fh,
+                stderr=log_fh,
+                preexec_fn=os.setsid,
+            )
+
+            # Update PID in state
+            target.pid = proc.pid
+            self._save_states(states, f)
+
+        return target.url
+
     def get_preview(self, session_id: str) -> Optional[PreviewState]:
         """Get preview state for a session."""
         states = self._load_states()

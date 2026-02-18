@@ -399,17 +399,23 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
                 f"[user]\n\tname = {git_name}\n\temail = {git_email}\n"
             )
 
+        # Only start per-ticket previews for single-ticket plans.
+        # Multi-ticket plans get a plan-level preview on the feature branch instead.
+        non_feedback_tickets = [t for t in plan.tickets if not t.is_feedback]
+        is_single_ticket = len(non_feedback_tickets) <= 1
+
         # Detect project preview config early so we can expose ports in Docker
         preview_project = None
         preview_port = None
-        try:
-            preview_project = _find_project_for_architect(arch.architect_id, data_dir)
-            if preview_project and preview_project.preview and use_docker:
-                from beehive.core.preview import PreviewManager
-                preview_mgr = PreviewManager(data_dir)
-                preview_port = preview_mgr._allocate_port(preview_mgr._load_states())
-        except Exception:
-            pass
+        if is_single_ticket:
+            try:
+                preview_project = _find_project_for_architect(arch.architect_id, data_dir)
+                if preview_project and preview_project.preview and use_docker:
+                    from beehive.core.preview import PreviewManager
+                    preview_mgr = PreviewManager(data_dir)
+                    preview_port = preview_mgr._allocate_port(preview_mgr._load_states())
+            except Exception:
+                pass
 
         docker_command = None
         if use_docker:
@@ -450,25 +456,26 @@ def _assign_single_ticket(ticket, plan, arch, storage, data_dir,
         plan.updated_at = datetime.utcnow()
         storage.save_plan(arch.architect_id, plan)
 
-        # Start preview environment on the host
-        try:
-            if preview_project and preview_project.preview:
-                from beehive.core.preview import PreviewManager
+        # Start preview environment on the host (single-ticket plans only)
+        if is_single_ticket:
+            try:
+                if preview_project and preview_project.preview:
+                    from beehive.core.preview import PreviewManager
 
-                preview_mgr = PreviewManager(data_dir)
-                preview_url = preview_mgr.start_preview(
-                    session_id=session.session_id,
-                    task_name=ticket.title,
-                    working_directory=str(worktree_path),
-                    setup_command=preview_project.preview.setup_command,
-                    teardown_command=preview_project.preview.teardown_command,
-                    url_template=preview_project.preview.url_template,
-                    startup_timeout=preview_project.preview.startup_timeout,
-                )
-                session_mgr.update_session(session.session_id, preview_url=preview_url)
-                console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
-        except Exception as e:
-            console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
+                    preview_mgr = PreviewManager(data_dir)
+                    preview_url = preview_mgr.start_preview(
+                        session_id=session.session_id,
+                        task_name=ticket.title,
+                        working_directory=str(worktree_path),
+                        setup_command=preview_project.preview.setup_command,
+                        teardown_command=preview_project.preview.teardown_command,
+                        url_template=preview_project.preview.url_template,
+                        startup_timeout=preview_project.preview.startup_timeout,
+                    )
+                    session_mgr.update_session(session.session_id, preview_url=preview_url)
+                    console.print(f"  Preview: [cyan]{preview_url}[/cyan]")
+            except Exception as e:
+                console.print(f"  [yellow]Warning: Preview failed: {e}[/yellow]")
 
         runtime_label = "docker" if use_docker else "host"
         console.print(
@@ -871,6 +878,86 @@ def _assign_feedback_ticket(ticket, plan, arch, storage, data_dir,
         return None
 
 
+def _maybe_start_plan_preview(plan, arch, storage, data_dir: Path) -> None:
+    """Start a plan-level preview after the first ticket merges (multi-ticket plans only)."""
+    non_feedback_tickets = [t for t in plan.tickets if not t.is_feedback]
+    if len(non_feedback_tickets) <= 1:
+        return
+    if plan.preview_url:
+        return
+    # Need at least one merged non-feedback ticket
+    has_merged = any(t.status == TicketStatus.MERGED for t in non_feedback_tickets)
+    if not has_merged:
+        return
+
+    project = _find_project_for_architect(arch.architect_id, data_dir)
+    if not project or not project.preview:
+        return
+    if not plan.base_branch:
+        return
+
+    # Find the repo for the worktree
+    repo_config = next((r for r in arch.repos if r.name == non_feedback_tickets[0].repo), None)
+    if not repo_config:
+        return
+
+    try:
+        from beehive.core.git_ops import GitOperations
+        from beehive.core.preview import PreviewManager
+
+        repo_path = Path(repo_config.path)
+        git = GitOperations(repo_path)
+
+        worktree_path = data_dir / "worktrees" / f"plan-{plan.plan_id}"
+        if not worktree_path.exists():
+            git.create_worktree_existing_branch(plan.base_branch, worktree_path)
+
+        preview_mgr = PreviewManager(data_dir)
+        preview_url = preview_mgr.start_preview(
+            session_id=f"plan-{plan.plan_id}",
+            task_name=f"plan-{plan.plan_id}",
+            working_directory=str(worktree_path),
+            setup_command=project.preview.setup_command,
+            teardown_command=project.preview.teardown_command,
+            url_template=project.preview.url_template,
+            startup_timeout=project.preview.startup_timeout,
+        )
+        plan.preview_url = preview_url
+        plan.updated_at = datetime.utcnow()
+        storage.save_plan(arch.architect_id, plan)
+        console.print(f"  Plan preview: [cyan]{preview_url}[/cyan]")
+    except Exception as e:
+        console.print(f"  [yellow]Warning: Plan preview failed: {e}[/yellow]")
+
+
+def _refresh_plan_preview(plan, data_dir: Path) -> None:
+    """Git pull in the plan worktree and restart the preview server."""
+    if not plan.preview_url:
+        return
+
+    worktree_path = data_dir / "worktrees" / f"plan-{plan.plan_id}"
+    if not worktree_path.exists():
+        return
+
+    try:
+        # Pull latest changes into the worktree
+        subprocess.run(
+            ["git", "pull", "origin", plan.base_branch],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        from beehive.core.preview import PreviewManager
+
+        preview_mgr = PreviewManager(data_dir)
+        preview_mgr.restart_preview(f"plan-{plan.plan_id}")
+        console.print("[dim]Plan preview refreshed with latest changes.[/dim]")
+    except Exception as e:
+        console.print(f"  [yellow]Warning: Preview refresh failed: {e}[/yellow]")
+
+
 @architect.command("watch")
 @click.argument("architect_id")
 @click.option("--plan", "-p", "plan_id", help="Specific plan ID (defaults to latest)")
@@ -958,6 +1045,12 @@ def watch_plan(ctx, architect_id: str, plan_id: Optional[str], interval: int):
             if synced:
                 plan.updated_at = datetime.utcnow()
                 storage.save_plan(arch.architect_id, plan)
+
+                # 2a. Manage plan-level preview after ticket merges
+                if not plan.preview_url:
+                    _maybe_start_plan_preview(plan, arch, storage, data_dir)
+                else:
+                    _refresh_plan_preview(plan, data_dir)
 
             # 2b. Check for new PR comments and dispatch feedback agents (every 30s)
             now = time.time()
