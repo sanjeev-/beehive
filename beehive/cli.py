@@ -649,6 +649,77 @@ def claude_md_set(ctx, content: str):
     console.print(f"[green]✓[/green] CLAUDE.md template saved to {config.get_claude_md_path()}")
 
 
+@cli.group()
+@click.pass_context
+def preview(ctx):
+    """Manage preview environments."""
+    pass
+
+
+@preview.command("list")
+@click.pass_context
+def preview_list(ctx):
+    """Show all active preview environments."""
+    from beehive.core.preview import PreviewManager
+    from beehive.core.architect_storage import ArchitectStorage
+
+    data_dir = ctx.obj["data_dir"]
+    preview_mgr = PreviewManager(data_dir)
+
+    # Clean up dead previews first
+    removed = preview_mgr.cleanup_dead_previews()
+    if removed:
+        console.print(f"[dim]Cleaned up {removed} dead preview(s).[/dim]")
+
+    previews = preview_mgr.list_previews()
+    if not previews:
+        console.print("[dim]No active previews.[/dim]")
+        return
+
+    # Build plan session_id → (architect_name, plan_directive) map
+    arch_storage = ArchitectStorage(data_dir)
+    plan_info = {}
+    for arch in arch_storage.load_all_architects():
+        for plan in arch.plans:
+            plan_key = f"plan-{plan.plan_id}"
+            plan_info[plan_key] = (arch.name, plan.directive)
+
+    # Build session_id → session name map for non-plan previews
+    session_mgr = ctx.obj["session_manager"]
+
+    table = Table(title="Preview Environments")
+    table.add_column("Port", style="cyan")
+    table.add_column("URL", style="cyan")
+    table.add_column("Type")
+    table.add_column("Name")
+    table.add_column("PID", style="dim")
+    table.add_column("Alive")
+
+    for p in sorted(previews, key=lambda x: x.port):
+        alive = PreviewManager._is_process_alive(p.pid)
+        alive_display = "[green]yes[/green]" if alive else "[red]no[/red]"
+
+        if p.session_id in plan_info:
+            arch_name, directive = plan_info[p.session_id]
+            preview_type = "plan"
+            name = f"{arch_name}: {directive[:50]}"
+        else:
+            session = session_mgr.get_session(p.session_id)
+            preview_type = "session"
+            name = session.name if session else p.session_id
+
+        table.add_row(
+            str(p.port),
+            p.url,
+            preview_type,
+            name,
+            str(p.pid),
+            alive_display,
+        )
+
+    console.print(table)
+
+
 cli.add_command(architect)
 cli.add_command(project)
 cli.add_command(cto)
