@@ -1,7 +1,7 @@
 name: bitbook
 description: Bitbook application — fabric (React frontend) and braid (Django backend)
 preview:
-  setup_command: "source ~/.bashrc && source /Users/sanjeev/Documents/bitbook/braid/py3.9-braid/bin/activate && BEEHIVE_PORT=$BEEHIVE_BACKEND_PORT ./startup.sh --container & cd /Users/sanjeev/Documents/bitbook/fabric/fabric && REACT_APP_API_URL=http://localhost:$BEEHIVE_BACKEND_PORT PORT=$BEEHIVE_PORT npm start"
+  setup_command: "ln -sf /Users/sanjeev/Documents/bitbook/braid/db.sqlite3 db.sqlite3 && source ~/.bashrc && source /Users/sanjeev/Documents/bitbook/braid/py3.9-braid/bin/activate && BEEHIVE_PORT=$BEEHIVE_BACKEND_PORT ./startup.sh --container & cd /Users/sanjeev/Documents/bitbook/fabric/fabric && REACT_APP_API_URL=http://localhost:$BEEHIVE_BACKEND_PORT PORT=$BEEHIVE_PORT npm start"
   teardown_command: "pkill -f 'startup.sh --container' || true; pkill -f 'react-scripts start' || true"
   url_template: "http://localhost:{port}"
   startup_timeout: 30
